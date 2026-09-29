@@ -1,0 +1,182 @@
+'use strict';
+let db, user=null, companies=[], memberships=[], marketRecords=[], keywordRecords=[];
+let generation=0, busy=false, ready=false, recovery=false;
+const pageOffsets=new Map();
+const $=id=>document.getElementById(id);
+const emptyState=()=>({rows:[],sheets:[],keywords:[],markets:[]});
+function SafeChart(canvas,config){if(!window.Chart)return {destroy(){}};config.options={...config.options,animation:false};return new window.Chart(canvas,config);}
+function activeCompany(){return companies.find(c=>c.id===activeAccount);}
+function companyLabel(){const c=activeCompany();return c?`${c.domain} — ${c.name}`:'';}
+function notify(message){$('notice').textContent=message;$('notice').hidden=!message;}
+function canWrite(){return memberships.some(m=>m.company_id===activeAccount&&['owner','editor'].includes(m.role));}
+function authMessage(message){$('authMessage').textContent=message;}
+function check(result){if(result.error)throw result.error;return result.data;}
+function setBusy(value){busy=value;document.body.classList.toggle('busy',value);$('accountSelect').disabled=value;$('loginButton').disabled=value;}
+function clearRenderedPages(){
+ pageOffsets.clear();
+ for(const chart of [monthChart,historyChart,reportChart,rankDonut])chart?.destroy();
+ monthChart=historyChart=reportChart=rankDonut=null;
+ document.querySelectorAll('tbody,thead#rankHead,.keyword-list,#latestSnapshot,#donutLegend,#dashReportStats,#reportStats,#dataInfo').forEach(el=>el.replaceChildren());
+ document.querySelectorAll('.pagination').forEach(el=>el.remove());
+}
+function renderActivePage(){
+ const renderers={dashboard:updateDashboard,rankings:renderRankings,history:renderHistory,reports:renderReport,entry:renderEntry,keywords:renderKeywords,markets:renderMarkets,import:renderImportInfo};
+ (renderers[document.querySelector('.page.active')?.id]||updateDashboard)();
+}
+function pageSlice(key,items,size,targetId,render){
+ const pages=Math.max(1,Math.ceil(items.length/size)),index=Math.min(pageOffsets.get(key)||0,pages-1),offset=index*size;
+ pageOffsets.set(key,index);let controls=$('pager-'+key);
+ if(!controls){controls=document.createElement('div');controls.id='pager-'+key;controls.className='pagination';const target=$(targetId);(target.closest('.tablewrap')||target).insertAdjacentElement('afterend',controls);}
+ controls.replaceChildren();controls.hidden=items.length<=size;
+ const previous=document.createElement('button'),next=document.createElement('button'),label=document.createElement('span');
+ previous.className=next.className='btn sm';previous.textContent='Previous';next.textContent='Next';previous.disabled=index===0;next.disabled=index>=pages-1;
+ label.textContent=(key==='rankingDates'?'Dates: ':'')+(items.length?offset+1:0)+'–'+Math.min(offset+size,items.length)+' of '+items.length;
+ previous.onclick=()=>{pageOffsets.set(key,index-1);render();};next.onclick=()=>{pageOffsets.set(key,index+1);render();};controls.append(previous,label,next);
+ return {items:items.slice(offset,offset+size),offset};
+}
+function dailyAverages(rows,days){const totals=new Map();for(const r of rows){const v=totals.get(r.date)||[0,0];if(r.position!==null){v[0]+=r.position;v[1]++;}totals.set(r.date,v);}return days.map(d=>{const v=totals.get(d);return v&&v[1]?v[0]/v[1]:null;});}
+function clearPrivate(){generation++;ready=false;activeAccount=null;state=emptyState();marketRecords=[];keywordRecords=[];document.querySelector('.app').hidden=true;for(const chart of [monthChart,historyChart,reportChart,rankDonut])chart?.destroy();monthChart=historyChart=reportChart=rankDonut=null;document.querySelectorAll('tbody,.keyword-list,#latestSnapshot,#donutLegend,#dashReportStats,#reportStats,#dataInfo').forEach(el=>el.replaceChildren());$('accountSelect').replaceChildren();}
+async function allRows(table,companyId){let rows=[];for(let from=0;;from+=1000){let q=db.from(table).select('*').order('id').range(from,from+999);if(companyId)q=q.eq('company_id',companyId);const page=check(await q);rows.push(...page);if(page.length<1000)return rows;}}
+async function loadCompany(id){
+ if(!companies.some(c=>c.id===id))throw Error('Company access is not available.');
+ const ticket=++generation; ready=false;activeAccount=id;state=emptyState();marketRecords=[];keywordRecords=[];
+ document.querySelector('.app').hidden=true;
+ clearRenderedPages();
+ const [ms,ks,rs]=await Promise.all(['markets','keywords','rankings'].map(t=>allRows(t,id)));
+ if(ticket!==generation||!user)return;
+ marketRecords=ms;keywordRecords=ks;const markets=new Map(ms.map(m=>[m.id,m.name])),keywords=new Map(ks.map(k=>[k.id,k.keyword]));
+ if([...ms,...ks,...rs].some(r=>r.company_id!==id))throw Error('Unexpected company data. Please reload.');
+ state={markets:ms.map(m=>m.name),keywords:ks.map(k=>({id:k.id,market_id:k.market_id,name:k.keyword,market:markets.get(k.market_id)||'',addedAt:k.created_at.slice(0,10)})),sheets:[],rows:rs.map(r=>({id:r.id,market_id:r.market_id,keyword_id:r.keyword_id,date:r.ranking_date,month:r.ranking_date.slice(0,7),country:markets.get(r.market_id)||'',keyword:keywords.get(r.keyword_id)||'',position:r.position,source:r.source}))};
+ // Clear every page on reload; render other pages only when opened.
+ document.querySelectorAll('.filters input').forEach(el=>el.value='');
+ document.querySelector('.app').hidden=false;
+ rebuildFilters();$('accountSelect').value=id;$('entryAccount').textContent=companyLabel();$('pageDesc').textContent=companyLabel();
+ $('sessionLabel').textContent=`${user.email||'Signed in'} · ${canWrite()?'Editor':'Read only'}`;
+ document.querySelectorAll('#entry button,#keywords button,#markets button,#import button,#fileInput').forEach(el=>el.disabled=!canWrite());
+ ready=true;document.querySelector('.app').hidden=false;$('authScreen').hidden=true;
+}
+async function switchAccount(id){if(busy||!user)return;setBusy(true);notify('Loading company…');try{await loadCompany(id);notify('');}catch(e){ready=false;state=emptyState();document.querySelector('.app').hidden=true;$('authScreen').hidden=false;authMessage('Unable to load company: '+e.message+'. Sign in again to retry.');}finally{setBusy(false);}}
+async function openSession(session){
+ if(!session){user=null;companies=[];memberships=[];clearPrivate();$('authScreen').hidden=false;$('authSignout').hidden=true;return;}
+ const ticket=++generation;user=session.user;setBusy(true);notify('Loading your workspace…');
+ try{const [cs,ms]=await Promise.all([allRows('companies'),db.from('company_members').select('company_id,role').eq('user_id',user.id).then(check)]);
+  if(ticket!==generation)return;companies=cs;memberships=ms;$('authSignout').hidden=false;
+  if(!cs.length){clearPrivate();$('authScreen').hidden=false;authMessage('Signed in, but no company membership has been assigned. Ask your administrator to grant access to TROLLEYS or PRODUCTS.');return;}
+  $('accountSelect').innerHTML=cs.map(c=>`<option value="${esc(c.id)}">${esc(c.domain+' — '+c.name)}</option>`).join('');
+  await loadCompany(cs[0].id);
+ }catch(e){clearPrivate();$('authScreen').hidden=false;authMessage('Workspace could not load: '+e.message);}finally{setBusy(false);notify('');}
+}
+async function logout(){clearPrivate();user=null;$('authScreen').hidden=false;authMessage('Signed out.');try{check(await db.auth.signOut({scope:'local'}));}catch(e){authMessage('Workspace cleared. Sign-out failed: '+e.message+' Close this tab to discard its session.');}}
+async function mutate(action,message){
+ if(busy)return;if(!ready||!user||!canWrite()){notify('An owner or editor membership is required.');return;}
+ const id=activeAccount,ticket=generation;let saved=false;setBusy(true);notify('Saving…');
+ try{await action(id);saved=true;if(ticket!==generation||id!==activeAccount||!user)return;await loadCompany(id);notify('');toast(message);}
+ catch(e){if(user&&activeAccount===id){if(!saved){try{await loadCompany(id);}catch{ready=false;}}else ready=false;if(!ready){document.querySelector('.app').hidden=true;$('authScreen').hidden=false;authMessage((saved?'Your data was saved, but the page could not refresh. ':'The operation could not finish. ')+e.message+' Sign in again to reload.');}notify((saved?'Saved, but refresh failed: ':'Save did not finish: ')+e.message);}}
+ finally{setBusy(false);}
+}
+function marketByName(name){return marketRecords.find(m=>m.name===name);}
+async function addMarket(){const name=$('newMarket').value.trim();if(!name)return notify('Enter a market name.');if(marketRecords.some(m=>m.name.toLowerCase()===name.toLowerCase()))return notify('This market already exists.');await mutate(async id=>{check(await db.from('markets').insert({company_id:id,name}).select().single());$('newMarket').value='';},'Market saved');}
+async function addKeyword(){const keyword=$('newKeyword').value.trim(),market=marketByName($('keywordMarket').value);if(!market||!keyword)return notify('Select a market and enter a keyword.');if(keywordRecords.some(k=>k.market_id===market.id&&k.keyword.toLowerCase()===keyword.toLowerCase()))return notify('Keyword already exists for this market.');await mutate(async id=>{check(await db.from('keywords').insert({company_id:id,market_id:market.id,keyword}).select().single());$('newKeyword').value='';},'Keyword saved');}
+async function deleteRecord(table,id){
+ if(table==='markets'){
+  const keywordCount=keywordRecords.filter(k=>k.market_id===id).length;
+  const rankingCount=state.rows.filter(r=>r.market_id===id).length;
+  if(keywordCount||rankingCount){notify('This market still has '+keywordCount+' keyword'+(keywordCount===1?'':'s')+' and '+rankingCount+' ranking entr'+(rankingCount===1?'y':'ies')+'. Delete its keywords and rankings first.');return;}
+ }
+ if(!confirm('Delete this '+(table==='keywords'?'keyword and its ranking history':'record')+' from '+companyLabel()+'?'))return;
+ await mutate(async company=>{const rows=check(await db.from(table).delete().eq('company_id',company).eq('id',id).select('id'));if(!rows.length)throw Error('No record deleted. Your access may have changed.');},'Deleted');
+}
+async function clearData(){if(!confirm('Permanently clear all markets, keywords and rankings for '+companyLabel()+'?'))return;await mutate(async id=>{for(const table of ['rankings','keywords','markets']){check(await db.from(table).delete().eq('company_id',id));if((await allRows(table,id)).length)throw Error('Some '+table+' could not be deleted. Check your membership.');}},'Selected company data cleared');}
+async function saveManualEntry(){
+ const date=$('entryDate').value,keyword=$('entryKeyword').value,market=marketByName($('entryCountry').value),raw=$('entryPosition').value;
+ const position=raw===''?null:Number(raw);
+ if(!date||!market||!keyword)return notify('Select date, country and keyword.');
+ if(position!==null&&(!Number.isInteger(position)||position<1||position>1000))return notify('Position must be a whole number from 1 to 1000, or blank for Not Ranked.');
+ const k=keywordRecords.find(k=>k.keyword===keyword&&(k.market_id===market.id||k.market_id===null));if(!k)return notify('This keyword is not assigned to the selected market.');
+ await mutate(async id=>{check(await db.from('rankings').upsert({company_id:id,market_id:market.id,keyword_id:k.id,ranking_date:date,position,source:'manual'},{onConflict:'keyword_id,market_id,ranking_date'}).select().single());$('entryPosition').value='';},'Ranking saved');
+}
+function deleteButton(table,id){const b=document.createElement('button');b.className='btn sm danger-text';b.textContent='Delete';b.disabled=!canWrite();b.onclick=()=>deleteRecord(table,id);return b;}
+function renderKeywords(){const el=$('keywordList');el.replaceChildren();$('keywordCountPill').textContent=state.keywords.length+' keywords';for(const k of pageSlice('keywords',state.keywords,100,'keywordList',renderKeywords).items){const row=document.createElement('div');row.className='keyword-row';const text=document.createElement('span');text.textContent=k.name+' · '+(k.market||'Unassigned');row.append(text,deleteButton('keywords',k.id));el.append(row);}if(!el.children.length)el.textContent='No keywords yet.';}
+function renderMarkets(){const el=$('marketList');el.replaceChildren();$('marketCountPill').textContent=marketRecords.length+' markets';for(const m of marketRecords){const row=document.createElement('div');row.className='market-row';const text=document.createElement('span');text.textContent=m.name;row.append(text,deleteButton('markets',m.id));el.append(row);}if(!el.children.length)el.textContent='No markets yet.';}
+function renderEntry(){if(!$('entryDate').value)$('entryDate').value=new Date().toLocaleDateString('en-CA');const el=$('entryBody');el.replaceChildren();for(const r of pageSlice('entry',state.rows.filter(r=>r.date===$('entryDate').value),100,'entryBody',renderEntry).items){const row=document.createElement('tr');for(const value of [r.date,r.country,r.keyword,displayPosition(r.position,r.date)]){const td=document.createElement('td');td.textContent=value;row.append(td);}const td=document.createElement('td');td.append(deleteButton('rankings',r.id));row.append(td);el.append(row);}}
+function refreshEntryKeywords(){fillSelect('entryKeyword',allKeywords($('entryCountry').value).map(x=>[x,x]),false);}
+function renderImportInfo(){$('dataInfo').textContent=state.rows.length.toLocaleString()+' ranking observations saved in Supabase for '+companyLabel()+'. Import merges by keyword, market and date; matching observations are updated.';}
+function renderRankings(){
+ const rs=filtered({month:$('rankMonth').value,country:$('rankCountry').value,date:$('rankDate').value});
+ const dates=[...new Set(rs.map(r=>r.date))].sort(),q=$('rankSearch').value.toLowerCase(),country=$('rankCountry').value,pairs=new Map(),positions=new Map();
+ for(const k of state.keywords){if((country==='ALL'||k.market===country)&&k.name.toLowerCase().includes(q))pairs.set(JSON.stringify([k.name,k.market]),{name:k.name,market:k.market});}
+ for(const r of rs){if(r.keyword.toLowerCase().includes(q))pairs.set(JSON.stringify([r.keyword,r.country]),{name:r.keyword,market:r.country});positions.set(JSON.stringify([r.keyword,r.country,r.date]),r.position);}
+ const datePage=pageSlice('rankingDates',dates,31,'rankHead',renderRankings),rowPage=pageSlice('rankings',[...pairs.values()],50,'rankBody',renderRankings);
+ $('rankHead').innerHTML='<tr><th>Keyword</th><th>Market</th>'+datePage.items.map(d=>'<th>'+esc(d)+'</th>').join('')+'</tr>';
+ $('rankBody').innerHTML=rowPage.items.map(k=>'<tr><td>'+esc(k.name)+'</td><td>'+esc(k.market)+'</td>'+datePage.items.map(d=>'<td>'+displayPosition(positions.get(JSON.stringify([k.name,k.market,d]))??null,d)+'</td>').join('')+'</tr>').join('');
+}
+function renderHistory(){
+ const rs=filtered({keyword:$('histKeyword').value,country:$('histCountry').value}).filter(r=>(!$('histFrom').value||r.date>=$('histFrom').value)&&(!$('histTo').value||r.date<=$('histTo').value)).sort((a,b)=>a.date.localeCompare(b.date));
+ const dates=[...new Set(rs.map(r=>r.date))],markets=[...new Set(rs.map(r=>r.country))],lookup=new Map(rs.map(r=>[JSON.stringify([r.date,r.country]),r.position]));
+ historyChart?.destroy();historyChart=new SafeChart($('historyChart'),{type:'line',data:{labels:dates,datasets:markets.map(m=>({label:m,data:dates.map(d=>lookup.get(JSON.stringify([d,m]))??null),spanGaps:false}))},options:{scales:{y:{reverse:true}}}});
+ const prev=new Map();const rows=rs.map(r=>{const d=delta(prev.get(r.country)??null,r.position);prev.set(r.country,r.position);return {r,d};});
+ $('histBody').innerHTML=pageSlice('history',rows,100,'histBody',renderHistory).items.map(({r,d})=>'<tr><td>'+esc(r.date)+'</td><td>'+esc(r.country)+'</td><td>'+esc(r.keyword)+'</td><td>'+displayPosition(r.position,r.date)+'</td><td>'+deltaHTML(d)+'</td></tr>').join('');
+}
+function parseDate(value){
+ if(value instanceof Date&&!isNaN(value))return validDate(value.getFullYear(),value.getDate(),value.getMonth()+1);
+ if(typeof value==='number'){const d=XLSX.SSF.parse_date_code(value);return d?validDate(d.y,d.d,d.m):null;}
+ const s=String(value??'').trim();if(!s||!/[0-9]/.test(s))return null;let m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);if(m)return validDate(+m[1],+m[2],+m[3]);m=s.match(/^(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{4})$/);if(m)return validDate(+m[3],+m[2],+m[1]);if(!/[a-z]/i.test(s))return null;const d=new Date(s);return isNaN(d)?null:parseDate(d);
+}
+function validDate(y,m,d){const dt=new Date(Date.UTC(y,m-1,d));return dt.getUTCFullYear()===y&&dt.getUTCMonth()===m-1&&dt.getUTCDate()===d?dt.toISOString().slice(0,10):null;}
+function parsePosition(value){if(value===null||value===undefined||String(value).trim()==='')return null;const s=String(value).trim().toLowerCase();if(['na','n/a','-','—','new','not found','not ranked'].includes(s))return null;if(s==='>100')return 101;const n=Number(s);if(!Number.isInteger(n)||n<1||n>1000)throw Error('Invalid ranking position: '+String(value).slice(0,40));return n;}
+function displayPosition(position,date){if(date&&new Date(date+'T00:00:00Z').getUTCDay()===0)return 'Weekend';return position===null?'No entry':fmtPos(position);}
+function marketFromKeyword(sheet,keyword){
+ const m=String(keyword).match(/\bin\s+(uae|saudi(?: arabia)?|india|oman|kuwait|jordan|bahrain|azerbaijan|us|usa|dubai)\b/i);
+ if(m){const k=m[1].toLowerCase();return ({uae:'UAE',saudi:'Saudi Arabia','saudi arabia':'Saudi Arabia',india:'India',oman:'Oman',kuwait:'Kuwait',jordan:'Jordan',bahrain:'Bahrain',azerbaijan:'Azerbaijan',us:'United States',usa:'United States',dubai:'Dubai'})[k]||m[1];}
+ return countryName(sheet);
+}
+function headerKeywordColumns(header){return header.map((v,i)=>/^(keyword|keywords)$/i.test(String(v??'').trim())?i:-1).filter(i=>i>=0);}
+function parseWorkbook(wb){
+ const markets=new Set(),keywords=new Map(),rows=new Map();
+ for(const name of wb.SheetNames){
+  const aoa=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,defval:null,raw:true});let headerRow=-1,cols=[];
+  for(let i=0;i<Math.min(12,aoa.length);i++){const found=headerKeywordColumns(aoa[i]);if(found.length){headerRow=i;cols=found;break;}}
+  if(headerRow<0)continue;
+  for(let b=0;b<cols.length;b++){
+   const keywordCol=cols[b],endCol=b+1<cols.length?cols[b+1]:aoa[headerRow].length;
+   const dates=[];for(let col=keywordCol+1;col<endCol;col++){const d=parseDate(aoa[headerRow][col]);if(d)dates.push([col,d]);}
+   if(!dates.length)continue;
+   for(const row of aoa.slice(headerRow+1)){const keyword=String(row[keywordCol]??'').trim();if(!keyword||/^(sl\s*no|keyword)$/i.test(keyword))continue;const market=marketFromKeyword(name,keyword);markets.add(market);keywords.set(JSON.stringify([market,keyword]),{market,keyword});for(const [col,date] of dates){const position=parsePosition(row[col]);rows.set(JSON.stringify([market,keyword,date]),{market,keyword,date,position});}}
+  }
+ }
+ if(!keywords.size)throw Error('No keyword/date blocks found. Use one or more Keyword headers followed by date columns.');
+ return {markets:[...markets].sort(),keywords:[...keywords.values()].sort((a,b)=>a.market.localeCompare(b.market)||a.keyword.localeCompare(b.keyword)),rows:[...rows.values()].sort((a,b)=>a.date.localeCompare(b.date)||a.market.localeCompare(b.market)||a.keyword.localeCompare(b.keyword))};
+}
+async function chunks(table,records,conflict){for(let i=0;i<records.length;i+=250){const part=records.slice(i,i+250);check(await db.from(table).upsert(part,{onConflict:conflict}));}}
+async function importFile(file){if(!file||busy||!ready)return;if(!canWrite())return notify('Editor access is required.');if(file.size>20*1024*1024)return notify('Choose a workbook smaller than 20 MB.');const id=activeAccount,ticket=generation;setBusy(true);notify('Reading workbook…');let parsed;try{if(!window.XLSX)throw Error('Excel library unavailable. Reload this page.');parsed=parseWorkbook(XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true}));}catch(e){notify('Import failed: '+e.message);return;}finally{setBusy(false);$('fileInput').value='';}if(ticket!==generation||id!==activeAccount)return;if(!confirm(`Import ${parsed.keywords.length} keywords and ${parsed.rows.length} rankings into ${companyLabel()}? Matching rankings will be replaced. Worksheet names become markets.`)){notify('');return;}
+ await mutate(async company=>{
+  const fresh=await allRows('markets',company);const missing=parsed.markets.filter(name=>!fresh.some(m=>m.name===name));await chunks('markets',missing.map(name=>({company_id:company,name})),'company_id,name');
+  const ms=await allRows('markets',company),map=new Map(ms.map(m=>[m.name,m.id]));
+  await chunks('keywords',parsed.keywords.map(k=>({company_id:company,market_id:map.get(k.market),keyword:k.keyword})),'company_id,market_id,keyword');
+  const ks=await allRows('keywords',company),km=new Map(ks.map(k=>[JSON.stringify([k.market_id,k.keyword]),k.id]));
+  await chunks('rankings',parsed.rows.map(r=>({company_id:company,market_id:map.get(r.market),keyword_id:km.get(JSON.stringify([map.get(r.market),r.keyword])),ranking_date:r.date,position:r.position,source:'import'})),'keyword_id,market_id,ranking_date');
+ },`Imported ${parsed.rows.length} rankings and ${parsed.keywords.length} keywords`);
+}
+function wireUI(){
+ document.addEventListener('change',e=>{if(e.target.closest('.filters'))pageOffsets.clear();},true);
+ document.addEventListener('input',e=>{if(e.target.id==='rankSearch')pageOffsets.clear();},true);
+ const actions={logout,goToReports,generateCurrentPDF,saveManualEntry,addKeyword,addMarket,clearData};document.querySelectorAll('[data-action]').forEach(el=>el.onclick=actions[el.dataset.action]);$('accountSelect').onchange=e=>switchAccount(e.target.value);
+ const titles={dashboard:'SERP Dashboard',rankings:'Daily Rankings',history:'Keyword History',reports:'Monthly Reports',entry:'Manual SERP Entry',keywords:'Keyword Management',markets:'Countries / Markets',import:'Import / Data'};
+ document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>{if(!ready)return;document.querySelectorAll('.nav button,.page').forEach(x=>x.classList.remove('active'));b.classList.add('active');$(b.dataset.page).classList.add('active');$('pageTitle').textContent=titles[b.dataset.page];$('pageDesc').textContent=companyLabel();renderActivePage();});
+ for(const id of ['rankMonth','rankCountry','rankDate'])$(id).onchange=renderRankings;$('rankSearch').oninput=renderRankings;
+ for(const id of ['histKeyword','histCountry','histFrom','histTo'])$(id).onchange=renderHistory;
+ for(const id of ['reportMonth','reportCountry'])$(id).onchange=renderReport;
+ for(const id of ['dashMonth','dashCountry'])$(id).onchange=updateDashboard;
+ $('entryDate').onchange=renderEntry;$('entryCountry').onchange=refreshEntryKeywords;
+ $('fileInput').onchange=e=>importFile(e.target.files[0]);const drop=$('drop');for(const event of ['dragenter','dragover','dragleave','drop'])drop.addEventListener(event,e=>{e.preventDefault();drop.classList.toggle('drag',event==='dragenter'||event==='dragover');if(event==='drop')importFile(e.dataTransfer.files[0]);});
+ $('authForm').onsubmit=async e=>{e.preventDefault();if(busy)return;setBusy(true);authMessage(recovery?'Updating password…':'Signing in…');try{if(recovery){check(await db.auth.updateUser({password:$('password').value}));recovery=false;$('loginButton').textContent='Sign in';authMessage('Password updated.');await openSession(check(await db.auth.getSession()).session);}else{const data=check(await db.auth.signInWithPassword({email:$('email').value,password:$('password').value}));$('password').value='';await openSession(data.session);}}catch(e){authMessage(e.message);}finally{setBusy(false);}};
+ $('resetButton').onclick=async()=>{if(!$('email').checkValidity()||!$('email').value)return authMessage('Enter your email first.');try{check(await db.auth.resetPasswordForEmail($('email').value,{redirectTo:location.origin+location.pathname}));authMessage('If this account exists, a password reset link will arrive by email.');}catch(e){authMessage(e.message);}};
+ $('authSignout').onclick=logout;
+}
+async function boot(){wireUI();$('loader').classList.add('hide');try{if(!window.supabase)throw Error('The website libraries failed to load. Reload to retry.');db=supabase.createClient(SERP_CONFIG.url,SERP_CONFIG.publishableKey,{auth:{persistSession:true,storage:sessionStorage,autoRefreshToken:true,detectSessionInUrl:true},global:{fetch:async(input,options={})=>fetch(input,{...options,signal:options.signal||AbortSignal.timeout(30000)})}});
+ db.auth.onAuthStateChange((event,session)=>{if(event==='SIGNED_OUT'){user=null;clearPrivate();$('authScreen').hidden=false;}if(event==='PASSWORD_RECOVERY'){recovery=true;clearPrivate();user=session.user;$('authScreen').hidden=false;$('email').value=session.user.email;$('password').value='';$('password').autocomplete='new-password';$('loginButton').textContent='Set new password';authMessage('Enter a new password to finish account setup or recovery.');}});
+ const data=check(await db.auth.getSession());if(!recovery)await openSession(data.session);
+ document.modelContext?.registerTool({name:'read_serp_workspace_summary',description:'Read counts for the signed-in, currently selected SERP company.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true,untrustedContentHint:true},execute(input){if(Object.keys(input||{}).length||!ready||!user)throw Error('A loaded authenticated workspace and empty input are required.');return {company:companyLabel(),markets:state.markets.length,keywords:state.keywords.length,rankings:state.rows.length};}});
+ }catch(e){authMessage(e.message);}}
+boot();
+
