@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src https://batqblvjtijcinijyfqd.supabase.co; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SERP TRACK — Rank Tracker</title>
+<link rel="icon" href="favicon.svg">
+
+<style>
+:root{--bg:#f5f7fb;--card:#fff;--text:#172033;--muted:#718096;--line:#e5e9f2;--primary:#2563eb;--primary2:#1d4ed8;--green:#16a34a;--red:#dc2626;--amber:#d97706;--sidebar:#0f172a}
+*{box-sizing:border-box} body{margin:0;font-family:Inter,Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--text)}
+.app{display:flex;min-height:100vh}.sidebar{width:245px;background:var(--sidebar);color:#fff;padding:24px 16px;position:fixed;inset:0 auto 0 0}.brand{font-size:20px;font-weight:800;padding:8px 12px 24px}.brand span{color:#60a5fa}.nav button{display:block;width:100%;border:0;background:transparent;color:#cbd5e1;text-align:left;padding:12px 14px;border-radius:9px;margin:4px 0;cursor:pointer;font-size:14px}.nav button.active,.nav button:hover{background:#1e293b;color:#fff}.sidebar .small{position:absolute;bottom:20px;left:24px;right:20px;color:#64748b;font-size:11px}
+.main{margin-left:245px;width:calc(100% - 245px);padding:28px 32px}.top{display:flex;justify-content:space-between;align-items:center;gap:20px;margin-bottom:24px}.title h1{margin:0;font-size:27px}.title p{margin:5px 0 0;color:var(--muted);font-size:13px}.actions{display:flex;gap:9px;flex-wrap:wrap}.btn{border:1px solid var(--line);background:#fff;color:var(--text);padding:10px 14px;border-radius:8px;cursor:pointer;font-weight:600;font-size:13px}.btn.primary{background:var(--primary);border-color:var(--primary);color:#fff}.btn.danger{color:var(--red)}.btn:hover{filter:brightness(.98)}
+.page{display:none}.page.active{display:block}.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:18px}.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px}.card .label{font-size:12px;color:var(--muted);margin-bottom:8px}.metric{font-size:27px;font-weight:800}.sub{font-size:12px;color:var(--muted);margin-top:6px}.grid2{display:grid;grid-template-columns:1.55fr 1fr;gap:16px}.panel{background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:16px}.panel h3{font-size:15px;margin:0 0 14px}.filters{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:15px}.filters select,.filters input{border:1px solid var(--line);padding:9px 10px;border-radius:8px;background:#fff;min-width:145px}.tablewrap{overflow:auto;max-height:560px;border:1px solid var(--line);border-radius:9px}table{width:100%;border-collapse:collapse;font-size:12px}th,td{padding:9px 10px;border-bottom:1px solid var(--line);white-space:nowrap;text-align:left}th{background:#f8fafc;position:sticky;top:0;z-index:1}.rank-good{font-weight:700}.rank-na{color:#a0aec0}.up{color:var(--green);font-weight:700}.down{color:var(--red);font-weight:700}.flat{color:var(--muted)}
+.empty{padding:45px;text-align:center;color:var(--muted)}.drop{border:2px dashed #cbd5e1;border-radius:12px;padding:35px;text-align:center;background:#f8fafc}.drop.drag{border-color:var(--primary);background:#eff6ff}.drop input{display:none}.drop label{cursor:pointer}.hint{font-size:12px;color:var(--muted);margin-top:8px}
+.report-filter-label{display:block;font-size:11px;color:var(--muted);font-weight:700;margin:0 0 5px}.report-meta{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:4px 0 14px}.report-meta>div{border:1px solid var(--line);border-radius:9px;padding:12px 14px;background:#f8fafc}.report-meta span{display:block;font-size:11px;color:var(--muted);margin-bottom:4px}.report-meta b{font-size:14px}.reportbox{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.reportbox .item{border:1px solid var(--line);border-radius:10px;padding:15px}.item b{display:block;font-size:20px;margin-top:4px}.sectiontitle{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.pill{display:inline-block;padding:4px 8px;border-radius:99px;background:#eff6ff;color:#1d4ed8;font-size:11px;font-weight:700}
+.toast{position:fixed;right:22px;bottom:22px;background:#111827;color:#fff;padding:12px 16px;border-radius:9px;font-size:13px;display:none;z-index:10}.toast.show{display:block}
+@media(max-width:900px){.sidebar{width:70px}.brand{font-size:0}.brand span{font-size:18px}.nav button{font-size:0;text-align:center}.main{margin-left:70px;width:calc(100% - 70px);padding:20px}.cards{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}.reportbox{grid-template-columns:1fr 1fr}}
+
+/* SERP TRACK additions */
+.loader{position:fixed;inset:0;background:#0f172a;display:flex;align-items:center;justify-content:center;z-index:9999;transition:opacity .45s ease,visibility .45s}.loader.hide{opacity:0;visibility:hidden}.loader-inner{text-align:center;color:#fff}.loader-logo{font-size:34px;font-weight:900;letter-spacing:1px}.loader-logo span{color:#60a5fa}.loader-bar{width:220px;height:4px;background:#334155;border-radius:99px;margin:18px auto;overflow:hidden}.loader-bar i{display:block;height:100%;width:40%;background:#60a5fa;border-radius:99px;animation:load 1.1s infinite ease-in-out}@keyframes load{0%{transform:translateX(-110%)}100%{transform:translateX(560%)}}
+.account-select{border:1px solid var(--line);background:#fff;padding:10px 12px;border-radius:8px;font-weight:700;min-width:190px}.donut-wrap{display:grid;grid-template-columns:240px 1fr;align-items:center;gap:24px}.donut-box{position:relative;width:240px;height:240px}.donut-box canvas{width:240px!important;height:240px!important}.donut-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none}.donut-center strong{font-size:28px}.donut-center span{font-size:11px;color:var(--muted)}.legend{display:grid;gap:12px}.legend-row{display:flex;align-items:center;gap:9px;font-size:13px}.legend-dot{width:12px;height:12px;border-radius:50%;flex:0 0 12px}.legend-row b{margin-left:auto}.palette{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.palette-item{padding:13px;border-radius:10px;color:#fff;font-weight:800;min-height:78px}.palette-item small{display:block;font-weight:500;margin-top:5px;opacity:.9}.p1{background:#16a34a}.p10{background:#2563eb}.p100{background:#f59e0b}.pna{background:#64748b}.manual-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.manual-grid label,.keyword-form label{font-size:11px;color:var(--muted);font-weight:700;display:block;margin-bottom:5px}.manual-grid select,.manual-grid input,.keyword-form input,.keyword-form select{width:100%;border:1px solid var(--line);padding:10px;border-radius:8px;background:#fff}.keyword-form{display:grid;grid-template-columns:220px 1fr auto;gap:10px;align-items:end}.market-form{display:grid;grid-template-columns:1fr auto;gap:10px}.market-form input{width:100%;border:1px solid var(--line);padding:10px;border-radius:8px;background:#fff}.market-row{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line);font-size:13px}.market-row:last-child{border-bottom:0}.keyword-list{max-height:460px;overflow:auto;border:1px solid var(--line);border-radius:9px}.history-filter-label{display:block;font-size:11px;color:var(--muted);font-weight:700;margin:0 0 5px}.history-filters>div{min-width:145px}.account-select{transition:opacity .15s ease,transform .15s ease}.account-select.switching{opacity:.65;transform:scale(.985)}.main.account-switching{opacity:.92;transition:opacity .12s ease}.keyword-row{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line);font-size:13px}.keyword-row:last-child{border-bottom:0}.btn.sm{padding:6px 9px;font-size:11px}.danger-text{color:var(--red)}
+@media(max-width:900px){.manual-grid{grid-template-columns:1fr 1fr}.palette{grid-template-columns:1fr 1fr}.account-select{min-width:140px}}
+</style>
+<link rel="stylesheet" href="cloud.css">
+</head>
+<body>
+<div class="loader" id="loader"><div class="loader-inner"><div class="loader-logo">SERP <span>TRACK</span></div><div class="loader-bar"><i></i></div><div style="font-size:12px;color:#94a3b8">Loading ranking workspace...</div></div></div>
+<section id="authScreen" class="auth-screen"><form id="authForm" class="auth-card"><div class="loader-logo">SERP <span>TRACK</span></div><h1>Sign in to your workspace</h1><p>Private ranking data for your company accounts.</p><label for="email">Email</label><input id="email" type="email" autocomplete="username" required><label for="password">Password</label><input id="password" type="password" autocomplete="current-password" required minlength="6"><button class="btn primary" id="loginButton">Sign in</button><button type="button" class="btn" id="resetButton">Forgot password?</button><button type="button" class="btn" id="authSignout" hidden>Sign out</button><p id="authMessage" role="status" aria-live="polite">Use the account provisioned by your administrator.</p></form></section>
+<div id="notice" role="status" aria-live="polite" hidden></div>
+<div class="app" hidden>
+<aside class="sidebar">
+  <div class="brand">SERP <span>TRACK</span></div>
+  <div class="nav">
+    <button class="active" data-page="dashboard">▣ &nbsp; Dashboard</button>
+    <button data-page="rankings">⌁ &nbsp; Daily Rankings</button>
+    <button data-page="history">◷ &nbsp; Keyword History</button>
+    <button data-page="reports">▤ &nbsp; Monthly Reports</button>
+    <button data-page="entry">✚ &nbsp; Manual Entry</button>
+    <button data-page="keywords">⌕ &nbsp; Keywords</button>
+    <button data-page="markets">◎ &nbsp; Countries / Markets</button>
+    <button data-page="import">⇧ &nbsp; Import / Data</button>
+  </div>
+  <div class="small">Private company workspace<br><span id="sessionLabel"></span><br><button class="btn sm" data-action="logout">Sign out</button></div>
+</aside>
+
+<main class="main">
+<div class="top">
+  <div class="title"><h1 id="pageTitle">SERP Dashboard</h1><p id="pageDesc">Track every keyword, every date, country and monthly performance.</p></div>
+  <div class="actions"><select id="accountSelect" class="account-select" aria-label="Company account" ></select></div>
+</div>
+
+<section class="page active" id="dashboard">
+  <div class="cards">
+    <div class="card"><div class="label">Keywords</div><div class="metric" id="mKeywords">0</div><div class="sub">Unique tracked keywords</div></div>
+    <div class="card"><div class="label">Countries</div><div class="metric" id="mCountries">0</div><div class="sub">Tracked locations</div></div>
+    <div class="card"><div class="label">Ranking Entries</div><div class="metric" id="mEntries">0</div><div class="sub">Keyword/date observations</div></div>
+    <div class="card"><div class="label">Top 10 Rate</div><div class="metric" id="mTop10">—</div><div class="sub">Across available observations</div></div>
+  </div>
+  <div class="grid2">
+    <div class="panel"><div class="sectiontitle"><h3>Average Position by Month</h3><span class="pill" id="dataStatus">No data</span></div><canvas id="monthChart" height="125"></canvas></div>
+    <div class="panel"><h3>Latest Snapshot</h3><div id="latestSnapshot" class="empty">No rankings yet.</div></div>
+  </div>
+  <div class="panel"><div class="sectiontitle"><h3>Ranking Position Palette</h3><span class="pill">Current account</span></div><div class="palette"><div class="palette-item p1">Top 1<small>Position 1</small></div><div class="palette-item p10">Top 10<small>Positions 2–10</small></div><div class="palette-item p100">Top 100<small>Positions 11–100</small></div><div class="palette-item pna">Not Ranked<small>No position / &gt;100</small></div></div></div>
+  <div class="panel"><div class="sectiontitle"><h3>SERP Ranking Distribution</h3><span class="pill" id="donutScope">Current selection</span></div><div class="donut-wrap"><div class="donut-box"><canvas id="rankDonut"></canvas><div class="donut-center"><strong id="donutTotal">0</strong><span>Keywords</span></div></div><div class="legend" id="donutLegend"></div></div></div>
+  <div class="panel"><h3>Monthly report generator</h3>
+    <div class="filters"><select id="dashMonth"></select><select id="dashCountry"></select><button class="btn primary" data-action="goToReports">Open Monthly Report</button></div>
+    <div class="reportbox" id="dashReportStats"></div>
+  </div>
+</section>
+
+<section class="page" id="rankings">
+  <div class="panel">
+    <div class="filters"><select id="rankMonth"></select><select id="rankCountry"></select><input id="rankSearch" placeholder="Search keyword..."><select id="rankDate"></select></div>
+    <div class="tablewrap"><table><thead id="rankHead"></thead><tbody id="rankBody"></tbody></table></div>
+  </div>
+</section>
+
+<section class="page" id="history">
+  <div class="panel">
+    <div class="filters history-filters">
+      <div><label class="history-filter-label">Keywords</label><select id="histKeyword"></select></div>
+      <div><label class="history-filter-label">Country / Market</label><select id="histCountry"></select></div>
+      <div><label class="history-filter-label">Starts From</label><input type="date" id="histFrom"></div>
+      <div><label class="history-filter-label">Ends</label><input type="date" id="histTo"></div>
+    </div>
+    <canvas id="historyChart" height="110"></canvas>
+  </div>
+  <div class="panel"><h3>Selected keyword observations</h3><div class="tablewrap"><table><thead><tr><th>Date</th><th>Country</th><th>Keyword</th><th>Position</th><th>Change</th></tr></thead><tbody id="histBody"></tbody></table></div></div>
+</section>
+
+<section class="page" id="reports">
+  <div class="panel">
+    <div class="sectiontitle"><h3>Monthly SERP Performance Report</h3><button class="btn primary" data-action="generateCurrentPDF">Download PDF</button></div>
+    <div class="filters"><div><label class="report-filter-label">Report Month / Date</label><select id="reportMonth"></select></div><div><label class="report-filter-label">Country / Market</label><select id="reportCountry"></select></div></div>
+    <div class="report-meta"><div><span>Reporting Date</span><b id="reportDateLabel">—</b></div><div><span>Country / Market</span><b id="reportCountryLabel">—</b></div></div>
+    <div class="reportbox" id="reportStats"></div>
+  </div>
+  <div class="panel"><h3>Keyword performance — start vs end of month</h3><div class="tablewrap"><table><thead><tr><th>#</th><th>Keyword</th><th>Start</th><th>End</th><th>Change</th><th>Status</th></tr></thead><tbody id="reportBody"></tbody></table></div></div>
+  <div class="panel"><h3>Daily average position</h3><canvas id="reportChart" height="110"></canvas></div>
+</section>
+
+<section class="page" id="entry">
+  <div class="panel"><div class="sectiontitle"><h3>Manual SERP Entry</h3><span class="pill" id="entryAccount">carwashtrolley.com</span></div>
+    <div class="manual-grid">
+      <div><label>Date</label><input type="date" id="entryDate"></div>
+      <div><label>Keyword</label><select id="entryKeyword"></select></div>
+      <div><label>Country / Market</label><select id="entryCountry"></select></div>
+      <div><label>Google Position</label><input type="number" id="entryPosition" min="1" max="1000" step="1" placeholder="1–1000"></div>
+    </div><br><button class="btn primary" data-action="saveManualEntry">Save Ranking</button>
+    <div class="hint">Leave position empty when the keyword is not ranked; it will be recorded as Not Ranked.</div>
+  </div>
+  <div class="panel"><h3>Selected date entries</h3><div class="tablewrap"><table><thead><tr><th>Date</th><th>Country</th><th>Keyword</th><th>Position</th><th></th></tr></thead><tbody id="entryBody"></tbody></table></div></div>
+</section>
+<section class="page" id="keywords">
+  <div class="panel"><div class="sectiontitle"><h3>Keyword Management</h3><span class="pill" id="keywordCountPill">0 keywords</span></div>
+    <div class="keyword-form"><div><label>Country / Market</label><select id="keywordMarket"></select></div><div><label>Keyword</label><input id="newKeyword" placeholder="Enter a new keyword..."></div><button class="btn primary" data-action="addKeyword">Add Keyword</button></div>
+    <div class="hint">Each keyword is assigned to a country / market for this account.</div>
+  </div>
+  <div class="panel"><div class="keyword-list" id="keywordList"></div></div>
+</section>
+
+<section class="page" id="markets">
+  <div class="panel"><div class="sectiontitle"><h3>Countries / Markets</h3><span class="pill" id="marketCountPill">0 markets</span></div>
+    <div class="market-form"><input id="newMarket" placeholder="Enter a country / market..."><button class="btn primary" data-action="addMarket">Add Country / Market</button></div>
+    <div class="hint">Markets are stored separately for TROLLEYS and PRODUCTS.</div>
+  </div>
+  <div class="panel"><div class="keyword-list" id="marketList"></div></div>
+</section>
+
+<section class="page" id="import">
+  <div class="panel">
+    <h3>Import your SERP Excel workbook</h3>
+    <div id="drop" class="drop"><input type="file" id="fileInput" accept=".xlsx,.xls,.csv"><label for="fileInput"><b>Click to select your Excel file</b><br>or drag & drop it here</label><div class="hint">The importer reads sheets containing a Keyword column and date columns. Sheet names are used as country/market labels when possible.</div></div>
+  </div>
+  <div class="panel"><div class="sectiontitle"><h3>Stored data</h3><button class="btn danger" data-action="clearData">Clear all data</button></div><div id="dataInfo" class="empty">Import a workbook for this company.</div></div>
+</section>
+</main></div>
+<div id="toast" class="toast"></div>
+
+<script src="config.js"></script>
+<script src="supabase.js"></script>
+<script src="chart.js"></script>
+<script src="jspdf.js"></script>
+<script src="autotable.js"></script>
+<script src="xlsx.js"></script>
+<script src="ui.js"></script>
+<script src="cloud.js"></script>
+</body>
+</html>
+
