@@ -23,6 +23,15 @@
 .loader{position:fixed;inset:0;background:#0f172a;display:flex;align-items:center;justify-content:center;z-index:9999;transition:opacity .45s ease,visibility .45s}.loader.hide{opacity:0;visibility:hidden}.loader-inner{text-align:center;color:#fff}.loader-logo{font-size:34px;font-weight:900;letter-spacing:1px}.loader-logo span{color:#60a5fa}.loader-bar{width:220px;height:4px;background:#334155;border-radius:99px;margin:18px auto;overflow:hidden}.loader-bar i{display:block;height:100%;width:40%;background:#60a5fa;border-radius:99px;animation:load 1.1s infinite ease-in-out}@keyframes load{0%{transform:translateX(-110%)}100%{transform:translateX(560%)}}
 .account-select{border:1px solid var(--line);background:#fff;padding:10px 12px;border-radius:8px;font-weight:700;min-width:190px}.donut-wrap{display:grid;grid-template-columns:240px 1fr;align-items:center;gap:24px}.donut-box{position:relative;width:240px;height:240px}.donut-box canvas{width:240px!important;height:240px!important}.donut-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none}.donut-center strong{font-size:28px}.donut-center span{font-size:11px;color:var(--muted)}.legend{display:grid;gap:12px}.legend-row{display:flex;align-items:center;gap:9px;font-size:13px}.legend-dot{width:12px;height:12px;border-radius:50%;flex:0 0 12px}.legend-row b{margin-left:auto}.palette{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.palette-item{padding:13px;border-radius:10px;color:#fff;font-weight:800;min-height:78px}.palette-item small{display:block;font-weight:500;margin-top:5px;opacity:.9}.p1{background:#16a34a}.p10{background:#2563eb}.p100{background:#f59e0b}.pna{background:#64748b}.manual-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.manual-grid label,.keyword-form label{font-size:11px;color:var(--muted);font-weight:700;display:block;margin-bottom:5px}.manual-grid select,.manual-grid input,.keyword-form input,.keyword-form select{width:100%;border:1px solid var(--line);padding:10px;border-radius:8px;background:#fff}.keyword-form{display:grid;grid-template-columns:220px 1fr auto;gap:10px;align-items:end}.market-form{display:grid;grid-template-columns:1fr auto;gap:10px}.market-form input{width:100%;border:1px solid var(--line);padding:10px;border-radius:8px;background:#fff}.market-row{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line);font-size:13px}.market-row:last-child{border-bottom:0}.keyword-list{max-height:460px;overflow:auto;border:1px solid var(--line);border-radius:9px}.history-filter-label{display:block;font-size:11px;color:var(--muted);font-weight:700;margin:0 0 5px}.history-filters>div{min-width:145px}.account-select{transition:opacity .15s ease,transform .15s ease}.account-select.switching{opacity:.65;transform:scale(.985)}.main.account-switching{opacity:.92;transition:opacity .12s ease}.keyword-row{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line);font-size:13px}.keyword-row:last-child{border-bottom:0}.btn.sm{padding:6px 9px;font-size:11px}.danger-text{color:var(--red)}
 @media(max-width:900px){.manual-grid{grid-template-columns:1fr 1fr}.palette{grid-template-columns:1fr 1fr}.account-select{min-width:140px}}
+
+/* Daily Rankings: aligned, labelled filters with a separate search row. */
+.ranking-filters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-bottom:20px}
+.ranking-filters>div{min-width:0}
+.ranking-filters label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:7px}
+.ranking-filters select,.ranking-filters input{width:100%;min-width:0;height:40px;color:var(--text);font:inherit;font-size:13px}
+.ranking-filters .ranking-search{grid-column:1/-1}
+.ranking-filters select:focus-visible,.ranking-filters input:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+@media(max-width:600px){.ranking-filters{grid-template-columns:1fr;gap:12px}}
 </style>
 <link rel="stylesheet" href="cloud.css">
 </head>
@@ -73,7 +82,12 @@
 
 <section class="page" id="rankings">
   <div class="panel">
-    <div class="filters"><select id="rankMonth"></select><select id="rankCountry"></select><input id="rankSearch" placeholder="Search keyword..."><select id="rankDate"></select></div>
+    <div class="filters ranking-filters">
+      <div><label for="rankMonth">Month</label><select id="rankMonth"></select></div>
+      <div><label for="rankCountry">Country / Market</label><select id="rankCountry"></select></div>
+      <div><label for="rankDate">Data</label><select id="rankDate" title="Filter data by date"></select></div>
+      <div class="ranking-search"><label for="rankSearch">Search keyword</label><input id="rankSearch" type="search" placeholder="Search keyword..."></div>
+    </div>
     <div class="tablewrap"><table><thead id="rankHead"></thead><tbody id="rankBody"></tbody></table></div>
   </div>
 </section>
