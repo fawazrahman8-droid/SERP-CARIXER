@@ -98,7 +98,22 @@ async function saveManualEntry(){
 function deleteButton(table,id){const b=document.createElement('button');b.className='btn sm danger-text';b.textContent='Delete';b.disabled=!canWrite();b.onclick=()=>deleteRecord(table,id);return b;}
 function renderKeywords(){const el=$('keywordList');el.replaceChildren();$('keywordCountPill').textContent=state.keywords.length+' keywords';for(const k of pageSlice('keywords',state.keywords,100,'keywordList',renderKeywords).items){const row=document.createElement('div');row.className='keyword-row';const text=document.createElement('span');text.textContent=k.name+' · '+(k.market||'Unassigned');row.append(text,deleteButton('keywords',k.id));el.append(row);}if(!el.children.length)el.textContent='No keywords yet.';}
 function renderMarkets(){const el=$('marketList');el.replaceChildren();$('marketCountPill').textContent=marketRecords.length+' markets';for(const m of marketRecords){const row=document.createElement('div');row.className='market-row';const text=document.createElement('span');text.textContent=m.name;row.append(text,deleteButton('markets',m.id));el.append(row);}if(!el.children.length)el.textContent='No markets yet.';}
-function renderEntry(){if(!$('entryDate').value)$('entryDate').value=new Date().toLocaleDateString('en-CA');const el=$('entryBody');el.replaceChildren();for(const r of pageSlice('entry',state.rows.filter(r=>r.date===$('entryDate').value),100,'entryBody',renderEntry).items){const row=document.createElement('tr');for(const value of [r.date,r.country,r.keyword,displayPosition(r.position,r.date)]){const td=document.createElement('td');td.textContent=value;row.append(td);}const td=document.createElement('td');td.append(deleteButton('rankings',r.id));row.append(td);el.append(row);}}
+function renderEntry(){
+ if(!$('entryDate').value)$('entryDate').value=new Date().toLocaleDateString('en-CA');
+ const date=$('entryDate').value,keyword=$('entryKeyword').value,country=$('entryCountry').value;
+ const el=$('entryBody');el.replaceChildren();
+ const matches=state.rows.filter(r=>r.date===date&&r.keyword===keyword&&r.country===country);
+ for(const r of pageSlice('entry',matches,100,'entryBody',renderEntry).items){
+  const row=document.createElement('tr');
+  for(const value of [r.date,r.country,r.keyword,displayPosition(r.position,r.date)]){const td=document.createElement('td');td.textContent=value;row.append(td);}
+  const td=document.createElement('td');td.append(deleteButton('rankings',r.id));row.append(td);el.append(row);
+ }
+ if(!matches.length){
+  const row=document.createElement('tr'),td=document.createElement('td');td.colSpan=5;td.className='empty';
+  td.textContent=keyword?'No entry saved for "'+keyword+'" in '+country+' on '+date+'.':'Select a keyword to check its entry for this date.';
+  row.append(td);el.append(row);
+ }
+}
 function refreshEntryKeywords(){fillSelect('entryKeyword',allKeywords($('entryCountry').value).map(x=>[x,x]),false);}
 function renderImportInfo(){$('dataInfo').textContent=state.rows.length.toLocaleString()+' ranking observations saved in Supabase for '+companyLabel()+'. Import merges by keyword, market and date; matching observations are updated.';}
 function renderRankings(){
@@ -169,7 +184,7 @@ function wireUI(){
  for(const id of ['histKeyword','histCountry','histFrom','histTo'])$(id).onchange=renderHistory;
  for(const id of ['reportMonth','reportCountry'])$(id).onchange=renderReport;
  for(const id of ['dashMonth','dashCountry'])$(id).onchange=updateDashboard;
- $('entryDate').onchange=renderEntry;$('entryCountry').onchange=refreshEntryKeywords;
+ $('entryDate').onchange=renderEntry;$('entryKeyword').onchange=renderEntry;$('entryCountry').onchange=()=>{refreshEntryKeywords();renderEntry();};
  $('fileInput').onchange=e=>importFile(e.target.files[0]);const drop=$('drop');for(const event of ['dragenter','dragover','dragleave','drop'])drop.addEventListener(event,e=>{e.preventDefault();drop.classList.toggle('drag',event==='dragenter'||event==='dragover');if(event==='drop')importFile(e.dataTransfer.files[0]);});
  $('authForm').onsubmit=async e=>{e.preventDefault();if(busy)return;setBusy(true);authMessage(recovery?'Updating password…':'Signing in…');try{if(recovery){check(await db.auth.updateUser({password:$('password').value}));recovery=false;$('loginButton').textContent='Sign in';authMessage('Password updated.');await openSession(check(await db.auth.getSession()).session);}else{const data=check(await db.auth.signInWithPassword({email:$('email').value,password:$('password').value}));$('password').value='';await openSession(data.session);}}catch(e){authMessage(e.message);}finally{setBusy(false);}};
  $('resetButton').onclick=async()=>{if(!$('email').checkValidity()||!$('email').value)return authMessage('Enter your email first.');try{check(await db.auth.resetPasswordForEmail($('email').value,{redirectTo:location.origin+location.pathname}));authMessage('If this account exists, a password reset link will arrive by email.');}catch(e){authMessage(e.message);}};
