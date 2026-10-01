@@ -1,13 +1,16 @@
 const markets={INDIA:['in','India'],OMAN:['om','Oman'],UAE:['ae','Dubai,Dubai,United Arab Emirates'],'UAE / MAIN':['ae','Dubai,Dubai,United Arab Emirates'],'SAUDI ARABIA':['sa','Saudi Arabia'],BAHRAIN:['bh','Bahrain'],JORDAN:['jo','Jordan'],'UNITED STATES':['us','United States']};
-async function checkRanking(input,{key='',fetchImpl=fetch,wait=ms=>new Promise(resolve=>setTimeout(resolve,ms)),onProgress=()=>{},now=Date.now}={}){
+async function checkRanking(input,{key='',fetchImpl=fetch,wait=ms=>new Promise(resolve=>setTimeout(resolve,ms)),onProgress=()=>{},now=Date.now,resume=null,onCheckpoint=async()=>{}}={}){
  const keyword=String(input.keyword||'').trim(),domain=String(input.domain||'').toLowerCase(),market=String(input.market||'').trim();
  if(!keyword||keyword.length>200)throw Error('Select a keyword of 1–200 characters.');
  if(!['carwashtrolley.com','ecowide.com'].includes(domain))throw Error('Select a supported company.');
  const settings=markets[market.toUpperCase()];if(!settings)throw Error('Unsupported market for this trial. Try India, Oman, UAE, Saudi Arabia, Bahrain, Jordan or United States.');
  if(!key?.trim())throw Error('SerpApi key is missing. Start START-SERPAPI-TRIAL.cmd from the same PowerShell window where you entered the key.');
  const url=new URL('https://serpapi.com/search.json');url.search=new URLSearchParams({engine:'google',q:keyword,google_domain:'google.com',gl:settings[0],location:settings[1],hl:'en',device:'desktop',start:'0',api_key:key.trim()}).toString();
- const deadline=now()+90000; const allResults=[];let start=0,retries=0;
- for(let page=1;page<=10;page++){
+ const validResume=resume&&resume.keyword===keyword&&resume.domain===domain&&resume.market===market&&now()-resume.startedAt<300000&&Number.isInteger(resume.page)&&resume.page>=1&&resume.page<=10&&Number.isInteger(resume.start)&&resume.start>=0&&resume.start<=1000;
+ const startedAt=validResume?resume.startedAt:now();
+ const deadline=now()+90000; const allResults=validResume?[...resume.results]:[];let start=validResume?resume.start:0,retries=0;
+ for(let page=validResume?resume.page:1;page<=10;page++){
+ await onCheckpoint({keyword,domain,market,startedAt,page,start,results:allResults});
  url.searchParams.set('start',String(start));
  let response;try{
   while(true){
