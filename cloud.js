@@ -10,6 +10,16 @@ function companyLabel(){const c=activeCompany();return c?`${c.domain} — ${c.na
 function notify(message){$('notice').textContent=message;$('notice').hidden=!message;}
 function canWrite(){return memberships.some(m=>m.company_id===activeAccount&&['owner','editor'].includes(m.role));}
 function authMessage(message){$('authMessage').textContent=message;}
+function setWorkspaceLoading(value){
+ const loader=$('loader');
+ if(value&&!loader.dataset.workspaceLoader){
+  loader.innerHTML='<div class="loader-inner workspace-loading"><div class="loader-logo">SERP <span>TRACK</span></div><div class="workspace-spinner" aria-hidden="true"></div><div role="status" aria-live="polite"><h2>Loading your workspace…</h2><p>Preparing your rankings and dashboard.</p></div></div>';
+  loader.dataset.workspaceLoader='true';
+ }
+ loader.classList.toggle('hide',!value);
+ loader.setAttribute('aria-hidden',String(!value));
+ $('authScreen').inert=value;
+}
 function check(result){if(result.error)throw result.error;return result.data;}
 function setBusy(value){busy=value;document.body.classList.toggle('busy',value);$('accountSelect').disabled=value;$('loginButton').disabled=value;}
 function clearRenderedPages(){
@@ -35,7 +45,7 @@ function pageSlice(key,items,size,targetId,render){
  return {items:items.slice(offset,offset+size),offset};
 }
 function dailyAverages(rows,days){const totals=new Map();for(const r of rows){const v=totals.get(r.date)||[0,0];if(r.position!==null){v[0]+=r.position;v[1]++;}totals.set(r.date,v);}return days.map(d=>{const v=totals.get(d);return v&&v[1]?v[0]/v[1]:null;});}
-function clearPrivate(){generation++;ready=false;activeAccount=null;state=emptyState();marketRecords=[];keywordRecords=[];document.querySelector('.app').hidden=true;for(const chart of [monthChart,historyChart,reportChart,rankDonut])chart?.destroy();monthChart=historyChart=reportChart=rankDonut=null;document.querySelectorAll('tbody,.keyword-list,#latestSnapshot,#donutLegend,#dashReportStats,#reportStats,#dataInfo').forEach(el=>el.replaceChildren());$('accountSelect').replaceChildren();}
+function clearPrivate(){setWorkspaceLoading(false);generation++;ready=false;activeAccount=null;state=emptyState();marketRecords=[];keywordRecords=[];document.querySelector('.app').hidden=true;for(const chart of [monthChart,historyChart,reportChart,rankDonut])chart?.destroy();monthChart=historyChart=reportChart=rankDonut=null;document.querySelectorAll('tbody,.keyword-list,#latestSnapshot,#donutLegend,#dashReportStats,#reportStats,#dataInfo').forEach(el=>el.replaceChildren());$('accountSelect').replaceChildren();}
 async function allRows(table,companyId){let rows=[];for(let from=0;;from+=1000){let q=db.from(table).select('*').order('id').range(from,from+999);if(companyId)q=q.eq('company_id',companyId);const page=check(await q);rows.push(...page);if(page.length<1000)return rows;}}
 async function loadCompany(id){
  if(!companies.some(c=>c.id===id))throw Error('Company access is not available.');
@@ -58,13 +68,13 @@ async function loadCompany(id){
 async function switchAccount(id){if(busy||!user)return;setBusy(true);notify('Loading company…');try{await loadCompany(id);notify('');}catch(e){ready=false;state=emptyState();document.querySelector('.app').hidden=true;$('authScreen').hidden=false;authMessage('Unable to load company: '+e.message+'. Sign in again to retry.');}finally{setBusy(false);}}
 async function openSession(session){
  if(!session){user=null;companies=[];memberships=[];clearPrivate();$('authScreen').hidden=false;$('authSignout').hidden=true;return;}
- const ticket=++generation;user=session.user;setBusy(true);notify('Loading your workspace…');
+ const ticket=++generation;user=session.user;setBusy(true);notify('');setWorkspaceLoading(true);
  try{const [cs,ms]=await Promise.all([allRows('companies'),db.from('company_members').select('company_id,role').eq('user_id',user.id).then(check)]);
   if(ticket!==generation)return;companies=cs;memberships=ms;$('authSignout').hidden=false;
   if(!cs.length){clearPrivate();$('authScreen').hidden=false;authMessage('Signed in, but no company membership has been assigned. Ask your administrator to grant access to TROLLEYS or PRODUCTS.');return;}
   $('accountSelect').innerHTML=cs.map(c=>`<option value="${esc(c.id)}">${esc(c.domain+' — '+c.name)}</option>`).join('');
   await loadCompany(cs[0].id);
- }catch(e){clearPrivate();$('authScreen').hidden=false;authMessage('Workspace could not load: '+e.message);}finally{setBusy(false);notify('');}
+ }catch(e){clearPrivate();$('authScreen').hidden=false;authMessage('Workspace could not load: '+e.message);}finally{setWorkspaceLoading(false);setBusy(false);notify('');}
 }
 async function logout(){clearPrivate();user=null;$('authScreen').hidden=false;authMessage('Signed out.');try{check(await db.auth.signOut({scope:'local'}));}catch(e){authMessage('Workspace cleared. Sign-out failed: '+e.message+' Close this tab to discard its session.');}}
 async function mutate(action,message){
