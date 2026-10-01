@@ -1,6 +1,6 @@
 (()=>{
  const panel=document.createElement('div');panel.className='panel';
- panel.innerHTML='<h3>Google ranking check</h3><p class="hint">SerpApi · English · Desktop. UAE uses Dubai. Recent results are reused for 5 minutes. Up to 10 pages and 2 retries per new check. Maximum 30 checks per company daily, one per minute.</p><button class="btn primary" type="button">Find ranking</button><p role="status" aria-live="polite"></p>';
+ panel.innerHTML='<h3>Google ranking check</h3><p class="hint">SerpApi · English · Desktop. UAE uses Dubai. Recent results are reused for 5 minutes, and timed-out searches resume from saved progress. Up to 10 pages and 2 retries per new check. Maximum 30 new checks per company daily, one new search per minute.</p><button class="btn primary" type="button">Find ranking</button><p role="status" aria-live="polite"></p>';
  document.querySelector('#entry').prepend(panel);
  const button=panel.querySelector('button'),status=panel.querySelector('[role=status]');
  let running=false;
@@ -62,3 +62,4 @@
   }catch(e){if(current())status.textContent=e.message;}finally{running=false;button.disabled=!canWrite();}
  };
 })();
+
