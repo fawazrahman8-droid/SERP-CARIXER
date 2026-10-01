@@ -37,7 +37,7 @@
   try{
    let data;const existing=await latest();
    if(recent(existing)&&existing.result?.status==='done')data=completed(existing);
-   else if(recent(existing)&&!existing.result&&Date.now()-Date.parse(existing.created_at)<120000){
+   else if(recent(existing)&&(!existing.result||existing.result.status==='running')&&Date.now()-Date.parse(existing.created_at)<120000){
     status.textContent='A check is already running. Retrieving its result without another API request…';data=await recover();
    }else{
     status.textContent='Checking Google — up to 90 seconds…';
@@ -50,7 +50,7 @@
      const row=await latest();
      if(recent(row)&&row.result?.status==='done')data=completed(row);
      else if(recent(row)&&row.result?.status==='error')throw Error(row.result.message);
-     else if(recent(row)&&!row.result){
+     else if(recent(row)&&(!row.result||row.result.status==='running')){
       status.textContent='Waiting for the existing check to finish — no additional API request…';data=await recover();
      }else throw Error(message||'The request failed before a check was stored. Please try again later.');
     }
