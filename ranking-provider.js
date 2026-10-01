@@ -13,10 +13,21 @@
   const market=marketRecords.find(m=>m.name===$('entryCountry').value);
   const keyword=keywordRecords.find(k=>k.keyword===$('entryKeyword').value&&k.market_id===market?.id);
   if(!keyword||!market){status.textContent='Select a keyword and its market.';return;}
+  const startedAt=new Date().toISOString(),callerId=user.id;
   running=true;button.disabled=true;status.textContent='Checking Google — up to 90 seconds…';
   try{
-   const {data,error}=await db.functions.invoke('serp-ranking',{body:{company_id:company,keyword_id:keyword.id,market_id:market.id}});
-   if(error){let message='Ranking check failed. Please try later.';try{message=(await error.context.json()).error||message;}catch{}throw Error(message);}
+   let {data,error}=await db.functions.invoke('serp-ranking',{body:{company_id:company,keyword_id:keyword.id,market_id:market.id}});
+   if(error&&!error.context){
+    status.textContent='The connection ended while Google was being checked. Retrieving the saved result…';
+    for(let attempt=0;attempt<20;attempt++){
+     if(ticket!==generation||!user)return;
+     const saved=await db.from('provider_checks').select('id,result').eq('company_id',company).eq('requested_by',callerId).eq('keyword_id',keyword.id).eq('market_id',market.id).gte('created_at',startedAt).order('created_at',{ascending:false}).limit(1).maybeSingle();
+     if(saved.error)break;
+     if(saved.data?.result){if(saved.data.result.status==='error')throw Error(saved.data.result.message);data={...saved.data.result,checkId:saved.data.id};error=null;break;}
+     await new Promise(resolve=>setTimeout(resolve,4000));
+    }
+   }
+   if(error){let message='Could not retrieve the completed check. Please try later.';try{message=(await error.context.json()).error||message;}catch{}throw Error(message);}
    if(ticket!==generation||company!==activeAccount||!user)return;
    if($('entryKeyword').value!==keyword.keyword||$('entryCountry').value!==market.name||$('entryDate').value!==date){status.textContent='Selection changed. The provider check was recorded; run another check for this selection.';return;}
    if(Number.isInteger(data.position))$('entryPosition').value=data.position;
