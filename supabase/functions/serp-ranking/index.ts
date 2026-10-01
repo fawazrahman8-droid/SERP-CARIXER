@@ -31,9 +31,18 @@ Deno.serve(async req=>{
  if(count>=30)return reply(429,{error:'Daily limit reached: 30 checks per company'});
  const {data:reserved,error:reserveError}=await admin.from('provider_checks').insert({company_id:input.company_id,requested_by:user.id,keyword_id:input.keyword_id,market_id:input.market_id,slot:Math.floor(Date.now()/60000)}).select('id').single();
  if(reserveError)return reply(reserveError.code==='23505'?429:503,{error:reserveError.code==='23505'?'Wait until the next minute before checking this company again.':'Could not reserve search'});
- let result;
- try{result=await checkRanking({keyword:k.data.keyword,market:m.data.name,domain:c.data.domain},{key});}
- catch(e){await admin.from('provider_checks').update({result:{status:'error',message:e.message}}).eq('id',reserved.id);return reply(502,{error:e.message});}
+ const previous=await admin.from('provider_checks').select('result').eq('company_id',input.company_id).eq('keyword_id',input.keyword_id).eq('market_id',input.market_id).neq('id',reserved.id).order('created_at',{ascending:false}).limit(1).maybeSingle();
+ let checkpoint=previous.data?.result?.resume||null,result;
+ try{result=await checkRanking({keyword:k.data.keyword,market:m.data.name,domain:c.data.domain},{
+ key,resume:checkpoint,onCheckpoint:async value=>{
+ checkpoint=value;
+ const saved=await admin.from('provider_checks').update({result:{status:'running',resume:value}}).eq('id',reserved.id);
+ if(saved.error)throw Error('Unable to preserve search progress.');
+ }});
+ }catch(e){
+ const message=e.message+(checkpoint?' Completed pages are preserved for 5 minutes. Click Find ranking again after the one-minute cooldown to resume page '+checkpoint.page+'.':'');
+ await admin.from('provider_checks').update({result:{status:'error',message,resume:checkpoint}}).eq('id',reserved.id);return reply(502,{error:message});
+ }
  const {error:saveError}=await admin.from('provider_checks').update({result}).eq('id',reserved.id);
  if(saveError)return reply(503,{error:'Search completed but its provider record could not be stored. Please try later.'});
  return reply(200,{...result,checkId:reserved.id});
