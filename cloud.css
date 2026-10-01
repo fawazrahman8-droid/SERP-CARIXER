@@ -2,3 +2,12 @@
 
 .pagination{display:flex;gap:12px;align-items:center;justify-content:flex-end;margin:12px 0;font-size:12px;color:var(--muted)}
 
+
+/* Workspace loading after sign-in. */
+.loader:not(.hide){pointer-events:auto}
+.workspace-loading{padding:32px;max-width:440px}
+.workspace-loading h2{margin:0;font-size:20px;font-weight:600;letter-spacing:-.3px}
+.workspace-loading p{margin:10px 0 0;color:#94a3b8;font-size:13px;line-height:1.6}
+.workspace-spinner{width:48px;height:48px;margin:30px auto 24px;border:3px solid #334155;border-top-color:#60a5fa;border-right-color:#2563eb;border-radius:50%;animation:workspace-spin .85s linear infinite}
+@keyframes workspace-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.workspace-spinner,.loader-bar i{animation:none}.loader{transition:none}}
