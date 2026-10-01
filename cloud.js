@@ -73,7 +73,8 @@ async function openSession(session){
   if(ticket!==generation)return;companies=cs;memberships=ms;$('authSignout').hidden=false;
   if(!cs.length){clearPrivate();$('authScreen').hidden=false;authMessage('Signed in, but no company membership has been assigned. Ask your administrator to grant access to TROLLEYS or PRODUCTS.');return;}
   $('accountSelect').innerHTML=cs.map(c=>`<option value="${esc(c.id)}">${esc(c.domain+' — '+c.name)}</option>`).join('');
-  await loadCompany(cs[0].id);
+  const defaultCompany=cs.find(c=>c.domain.toLowerCase()==='carwashtrolley.com')||cs[0];
+  await loadCompany(defaultCompany.id);
  }catch(e){clearPrivate();$('authScreen').hidden=false;authMessage('Workspace could not load: '+e.message);}finally{setWorkspaceLoading(false);setBusy(false);notify('');}
 }
 async function logout(){clearPrivate();user=null;$('authScreen').hidden=false;authMessage('Signed out.');try{check(await db.auth.signOut({scope:'local'}));}catch(e){authMessage('Workspace cleared. Sign-out failed: '+e.message+' Close this tab to discard its session.');}}
