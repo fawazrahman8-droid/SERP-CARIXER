@@ -32,7 +32,7 @@ Deno.serve(async req=>{
  const previousResult=previous.data?.result;
  if(previousAge>=0&&previousAge<300000&&previousResult?.status==='done')return reply(200,{...previousResult,checkId:previous.data.id,reused:true});
  if(previousAge>=0&&previousAge<120000&&previousResult?.status==='running')return reply(409,{error:'This search is still running. Its saved result will appear here when it finishes.'});
- const canResume=previousAge>=120000&&previousAge<300000&&['error','running'].includes(previousResult?.status)&&previousResult.resume;
+ const canResume=previousAge>=0&&previousAge<300000&&previousResult?.resume&&(previousResult.status==='error'||(previousAge>=120000&&previousResult.status==='running'));
  let reserved,checkpoint=canResume?previousResult.resume:null;
  if(canResume){
   reserved={id:previous.data.id};
