@@ -65,7 +65,7 @@ async function loadCompany(id){
  document.querySelectorAll('#entry button,#keywords button,#markets button,#import button,#fileInput').forEach(el=>el.disabled=!canWrite());
  ready=true;document.querySelector('.app').hidden=false;$('authScreen').hidden=true;
 }
-async function switchAccount(id){if(busy||!user)return;setBusy(true);notify('Loading company…');try{await loadCompany(id);notify('');}catch(e){ready=false;state=emptyState();document.querySelector('.app').hidden=true;$('authScreen').hidden=false;authMessage('Unable to load company: '+e.message+'. Sign in again to retry.');}finally{setBusy(false);}}
+async function switchAccount(id){if(busy||!user)return;setBusy(true);notify('');setWorkspaceLoading(true);try{await loadCompany(id);notify('');}catch(e){ready=false;state=emptyState();document.querySelector('.app').hidden=true;$('authScreen').hidden=false;authMessage('Unable to load company: '+e.message+'. Sign in again to retry.');}finally{setWorkspaceLoading(false);setBusy(false);}}
 async function openSession(session){
  if(!session){user=null;companies=[];memberships=[];clearPrivate();$('authScreen').hidden=false;$('authSignout').hidden=true;return;}
  const ticket=++generation;user=session.user;setBusy(true);notify('');setWorkspaceLoading(true);
