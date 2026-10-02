@@ -228,8 +228,21 @@ function setupEntryKeywordSearch(){
  syncEntryKeywordSearch();
 }
 
+function setupManualSearch(){
+ const save=document.querySelector('[data-action="saveManualEntry"]');
+ const button=document.createElement('button');button.type='button';button.className='btn';button.textContent='Search';button.style.marginRight='8px';
+ button.setAttribute('aria-label','Search selected keyword in a new tab');
+ button.onclick=()=>{
+  const keyword=$('entryKeyword').value;
+  if(!ready||!user||!keyword){notify('Select a keyword before searching.');$('entryKeywordSearch')?.focus();return;}
+  const url=new URL('https://www.google.com/search');url.searchParams.set('q',keyword);
+  window.open(url.href,'_blank','noopener,noreferrer');
+ };
+ save.insertAdjacentElement('beforebegin',button);
+}
 function wireUI(){
  setupEntryKeywordSearch();
+ setupManualSearch();
  document.addEventListener('change',e=>{if(e.target.closest('.filters'))pageOffsets.clear();},true);
  document.addEventListener('input',e=>{if(e.target.id==='rankSearch')pageOffsets.clear();},true);
  const actions={logout,goToReports,generateCurrentPDF,saveManualEntry,addKeyword,addMarket,clearData};document.querySelectorAll('[data-action]').forEach(el=>el.onclick=actions[el.dataset.action]);$('accountSelect').onchange=e=>switchAccount(e.target.value);
