@@ -125,7 +125,7 @@ function renderEntry(){
   row.append(td);el.append(row);
  }
 }
-function refreshEntryKeywords(){fillSelect('entryKeyword',allKeywords($('entryCountry').value).map(x=>[x,x]),false);}
+function refreshEntryKeywords(){fillSelect('entryKeyword',allKeywords($('entryCountry').value).map(x=>[x,x]),false);syncEntryKeywordSearch();}
 function renderImportInfo(){$('dataInfo').textContent=state.rows.length.toLocaleString()+' ranking observations saved in Supabase for '+companyLabel()+'. Import merges by keyword, market and date; matching observations are updated.';}
 function renderRankings(){
  const rs=filtered({month:$('rankMonth').value,country:$('rankCountry').value,date:$('rankDate').value});
@@ -185,7 +185,51 @@ async function importFile(file){if(!file||busy||!ready)return;if(!canWrite())ret
   await chunks('rankings',parsed.rows.map(r=>({company_id:company,market_id:map.get(r.market),keyword_id:km.get(JSON.stringify([map.get(r.market),r.keyword])),ranking_date:r.date,position:r.position,source:'import'})),'keyword_id,market_id,ranking_date');
  },`Imported ${parsed.rows.length} rankings and ${parsed.keywords.length} keywords`);
 }
+
+let syncEntryKeywordSearch=()=>{};
+function setupEntryKeywordSearch(){
+ const select=$('entryKeyword'),wrap=document.createElement('div'),input=document.createElement('input'),list=document.createElement('div');
+ wrap.className='keyword-combobox';input.id='entryKeywordSearch';input.type='text';input.placeholder='Type to search keywords…';input.autocomplete='off';
+ input.setAttribute('role','combobox');input.setAttribute('aria-autocomplete','list');input.setAttribute('aria-controls','entryKeywordMatches');input.setAttribute('aria-expanded','false');
+ input.setAttribute('aria-label','Keyword');list.id='entryKeywordMatches';list.className='keyword-matches';list.setAttribute('role','listbox');list.hidden=true;
+ select.hidden=true;select.insertAdjacentElement('afterend',wrap);wrap.append(input,list);
+ select.parentElement.querySelector('label')?.setAttribute('for',input.id);
+ let matches=[],highlight=-1,selected='';
+ const close=()=>{list.hidden=true;input.setAttribute('aria-expanded','false');input.removeAttribute('aria-activedescendant');highlight=-1;};
+ const mark=index=>{
+  highlight=index;
+  [...list.querySelectorAll('[role="option"]')].forEach((el,i)=>el.setAttribute('aria-selected',String(i===index)));
+  const active=list.querySelectorAll('[role="option"]')[index];
+  if(active){input.setAttribute('aria-activedescendant',active.id);active.scrollIntoView({block:'nearest'});}
+ };
+ const choose=value=>{select.value=value;selected=select.value;input.value=selected;close();select.dispatchEvent(new Event('change',{bubbles:true}));};
+ const draw=query=>{
+  const filtered=[...select.options].filter(o=>o.value&&o.text.toLowerCase().includes(query.trim().toLowerCase()));
+  matches=filtered.slice(0,100);highlight=-1;list.replaceChildren();input.removeAttribute('aria-activedescendant');
+  matches.forEach((o,i)=>{
+   const item=document.createElement('div');item.id='entryKeywordMatch-'+i;item.setAttribute('role','option');item.setAttribute('aria-selected','false');item.textContent=o.text;
+   item.onmousedown=e=>e.preventDefault();item.onclick=()=>choose(o.value);list.append(item);
+  });
+  if(!matches.length||filtered.length>100){const note=document.createElement('div');note.className='keyword-match-note';note.setAttribute('role','presentation');note.textContent=matches.length?'Showing 100 matches. Keep typing to narrow the list.':'No matching keywords in this market.';list.append(note);}
+  list.hidden=false;input.setAttribute('aria-expanded','true');
+ };
+ syncEntryKeywordSearch=()=>{selected=select.value;input.value=selected;input.disabled=!select.options.length;close();};
+ input.onfocus=()=>{input.select();draw('');};
+ input.oninput=()=>{select.value='';renderEntry();draw(input.value);};
+ input.onblur=close;
+ input.onkeydown=e=>{
+  if(e.key==='ArrowDown'||e.key==='ArrowUp'){
+   e.preventDefault();if(list.hidden)draw(input.value);
+   if(matches.length)mark(e.key==='ArrowDown'?Math.min(highlight+1,matches.length-1):(highlight<0?matches.length-1:Math.max(highlight-1,0)));
+  }else if(e.key==='Enter'&&!list.hidden){e.preventDefault();if(highlight>=0)choose(matches[highlight].value);else if(matches.length===1)choose(matches[0].value);}
+  else if(e.key==='Escape'){e.preventDefault();select.value=selected;input.value=select.value;close();renderEntry();}
+ };
+ select.addEventListener('change',syncEntryKeywordSearch);
+ syncEntryKeywordSearch();
+}
+
 function wireUI(){
+ setupEntryKeywordSearch();
  document.addEventListener('change',e=>{if(e.target.closest('.filters'))pageOffsets.clear();},true);
  document.addEventListener('input',e=>{if(e.target.id==='rankSearch')pageOffsets.clear();},true);
  const actions={logout,goToReports,generateCurrentPDF,saveManualEntry,addKeyword,addMarket,clearData};document.querySelectorAll('[data-action]').forEach(el=>el.onclick=actions[el.dataset.action]);$('accountSelect').onchange=e=>switchAccount(e.target.value);
