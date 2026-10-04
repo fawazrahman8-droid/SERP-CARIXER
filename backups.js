@@ -30,7 +30,7 @@ const WeeklyBackup=(()=>{
   if(slot>now)slot-=WEEK;
   return slot;
  }
- function scope(){return companies.filter(c=>memberships.some(m=>m.company_id===c.id&&m.role==='owner')).sort((a,b)=>a.id.localeCompare(b.id));}
+ function scope(){return companies.filter(c=>memberships.some(m=>m.company_id===c.id&&['owner','co_admin'].includes(m.role))).sort((a,b)=>a.id.localeCompare(b.id));}
  function message(t){document.getElementById('backupStatus').textContent=t;}
  function sheet(X,wb,name,rows,headers){
   const ws=X.utils.json_to_sheet(rows,{header:headers});
@@ -42,7 +42,7 @@ const WeeklyBackup=(()=>{
   const X=await ensureExcelLibrary(),wb=X.utils.book_new(),started=new Date().toISOString();
   sheet(X,wb,'Backup Info',[
    {Item:'Generated UTC',Value:started},{Item:'Scheduled UAE',Value:new Date(scheduled+4*3600000).toISOString().slice(0,16)+' UAE'},
-   {Item:'Scope',Value:'Companies where this account is an admin; all dates.'},
+   {Item:'Scope',Value:'Companies where this account is an admin or co-admin; all dates.'},
    {Item:'Snapshot',Value:'Current data fetched at generation time. Reads are sequential, not an atomic database snapshot.'},
    {Item:'Recovery',Value:'Raw identifiers retained. Restore requires administrator assistance; do not use normal ranking import.'},
    {Item:'Privacy',Value:'Private company data. Store this workbook securely.'}
@@ -68,7 +68,7 @@ const WeeklyBackup=(()=>{
   const panel=document.getElementById('weeklyBackupPanel');
   if(!panel)return;
   syncHistoryAccess();const cs=scope();panel.hidden=!user||!ready||!cs.length;
-  // The main role renderer disables import buttons; this is an admin export action.
+  // The main role renderer disables import buttons; this is an admin/co-admin export action.
   document.getElementById('backupDownload').disabled=running||!cs.length;
   if(panel.hidden||busy||running||(!manual&&Date.now()<retryAfter))return;
   if(!navigator.locks){message('Automatic backups need a browser with Web Locks support, such as current Chrome or Edge.');return;}
@@ -91,7 +91,7 @@ const WeeklyBackup=(()=>{
     // Recheck current server membership before exporting, in addition to table RLS.
     attemptSlot=due?slot:null;attempt=log('Preparing',attemptSlot,manual?'Manual backup':Date.now()-slot>60000?'Late run: exporting current data after a missed schedule.':'Scheduled backup');
     const fresh=check(await db.from('company_members').select('company_id,role').eq('user_id',uid));
-    if(cs.some(c=>!fresh.some(m=>m.company_id===c.id&&m.role==='owner')))throw Error('Admin access changed. Sign in again.');
+    if(cs.some(c=>!fresh.some(m=>m.company_id===c.id&&['owner','co_admin'].includes(m.role))))throw Error('Backup access changed. Sign in again.');
     const {X,wb}=await build(cs,slot,valid);
     if(!valid())throw Error('Session changed. No download created.');
     const stamp=new Date().toISOString().replace(/[:.]/g,'-');
@@ -106,14 +106,14 @@ const WeeklyBackup=(()=>{
  }
  function start(){
   const panel=document.createElement('div');panel.id='weeklyBackupPanel';panel.className='panel';panel.hidden=true;
-  panel.innerHTML='<h3>Weekly Excel backup</h3><p>Every Saturday at 5:00 PM UAE time. Keep this computer awake, signed in as an admin, and this website open. Allow browser downloads. A missed run exports current data at your next visit.</p><p>Includes all dates for your admin company accounts. This browser remembers download requests; it cannot confirm that a file was saved. Clearing browser data resets the schedule.</p><p id="backupStatus" role="status"></p><button type="button" class="btn" id="backupDownload">Download backup now</button>';
+  panel.innerHTML='<h3>Weekly Excel backup</h3><p>Every Saturday at 5:00 PM UAE time. Keep this computer awake, signed in as an admin or co-admin, and this website open. Allow browser downloads. A missed run exports current data at your next visit.</p><p>Includes all dates for your assigned company accounts. This browser remembers download requests; it cannot confirm that a file was saved. Clearing browser data resets the schedule.</p><p id="backupStatus" role="status"></p><button type="button" class="btn" id="backupDownload">Download backup now</button>';
   const sidebar=document.querySelector('.sidebar');
   if(sidebar){
    sidebar.style.display='flex';sidebar.style.flexDirection='column';
    const footer=document.createElement('div');footer.style.cssText='margin-top:auto;padding:24px 8px 12px;border-top:1px solid #334155';
    const button=document.createElement('button');button.id='backupHistoryButton';button.type='button';button.className='btn';button.textContent='Backup History';button.hidden=true;footer.append(button);sidebar.append(footer);
    const dialog=document.createElement('dialog');dialog.id='backupHistoryDialog';dialog.className='panel';dialog.style.cssText='width:min(1100px,94vw);max-height:85vh;overflow:auto;color:var(--text);background:var(--card);border:1px solid var(--line);border-radius:14px';
-   dialog.innerHTML='<div class="sectiontitle"><h2>Backup History</h2><button type="button" class="btn" id="closeBackupHistory">Close</button></div><p>Saturday, 5:00 PM UAE • Admin company accounts</p><p>History belongs to this browser only and keeps the latest 250 events. Clearing browser data removes it. A download request does not confirm that a file was saved; check Downloads. Missed weeks appear when the site next opens (up to 52 weeks).</p><div id="backupControls"></div><div class="tablewrap"><table><thead><tr><th>Scheduled (UAE)</th><th>Recorded (UAE)</th><th>Status</th><th>File</th><th>Details</th></tr></thead><tbody id="backupHistoryRows"></tbody></table></div>';
+   dialog.innerHTML='<div class="sectiontitle"><h2>Backup History</h2><button type="button" class="btn" id="closeBackupHistory">Close</button></div><p>Saturday, 5:00 PM UAE • Admin / co-admin company accounts</p><p>History belongs to this browser only and keeps the latest 250 events. Clearing browser data removes it. A download request does not confirm that a file was saved; check Downloads. Missed weeks appear when the site next opens (up to 52 weeks).</p><div id="backupControls"></div><div class="tablewrap"><table><thead><tr><th>Scheduled (UAE)</th><th>Recorded (UAE)</th><th>Status</th><th>File</th><th>Details</th></tr></thead><tbody id="backupHistoryRows"></tbody></table></div>';
    document.body.append(dialog);dialog.querySelector('#backupControls').append(panel);
    button.onclick=()=>{if(!user||!ready||!scope().length)return;renderHistory();dialog.showModal();checkDue();};
    document.getElementById('closeBackupHistory').onclick=()=>dialog.close();
