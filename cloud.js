@@ -9,6 +9,31 @@ function activeCompany(){return companies.find(c=>c.id===activeAccount);}
 function companyLabel(){const c=activeCompany();return c?`${c.domain} — ${c.name}`:'';}
 function notify(message){$('notice').textContent=message;$('notice').hidden=!message;}
 function canWrite(){return memberships.some(m=>m.company_id===activeAccount&&['owner','editor'].includes(m.role));}
+
+function isCoAdmin(){return memberships.some(m=>m.company_id===activeAccount&&m.role==='co_admin');}
+function dubaiToday(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Dubai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());}
+function usernameEmail(value){const username=value.trim().toLowerCase();if(!/^[a-z0-9][a-z0-9._-]{2,39}$/.test(username))throw Error('Enter your assigned username.');return username+'@users.serptrack.invalid';}
+function pageDescription(){return companyLabel()+(isCoAdmin()?' · Today only ('+dubaiToday()+', Dubai)':'');}
+let dateAccessTimer=null,loadedAccessDate='';
+function refreshDateAccess(){
+ if(!user||!isCoAdmin()||!loadedAccessDate||loadedAccessDate===dubaiToday())return;
+ ready=false;state=emptyState();clearRenderedPages();document.querySelector('.app').hidden=true;
+ if(busy){dateAccessTimer=setTimeout(refreshDateAccess,1000);return;}
+ void switchAccount(activeAccount);
+}
+function applyRoleUI(){
+ const limited=isCoAdmin();loadedAccessDate=limited?dubaiToday():'';
+ for(const page of ['history','reports','entry','keywords','markets','import'])document.querySelector('[data-page="'+page+'"]').hidden=limited;
+ for(const id of ['rankMonth','rankDate']){$(id).parentElement.hidden=limited;$(id).disabled=limited;}
+ $('monthChart').closest('.panel').hidden=limited;$('dashMonth').closest('.panel').hidden=limited;
+ if(limited&&!['dashboard','rankings'].includes(document.querySelector('.page.active')?.id)){
+  document.querySelectorAll('.nav button,.page').forEach(el=>el.classList.remove('active'));
+  $('dashboard').classList.add('active');document.querySelector('[data-page="dashboard"]').classList.add('active');$('pageTitle').textContent='SERP Dashboard';renderActivePage();
+ }
+ clearTimeout(dateAccessTimer);
+ if(limited)dateAccessTimer=setTimeout(refreshDateAccess,Math.max(1000,Date.parse(dubaiToday()+'T00:00:00+04:00')+86400000-Date.now()+100));
+}
+
 function authMessage(message){$('authMessage').textContent=message;}
 function setWorkspaceLoading(value){
  const loader=$('loader');
@@ -45,8 +70,8 @@ function pageSlice(key,items,size,targetId,render){
  return {items:items.slice(offset,offset+size),offset};
 }
 function dailyAverages(rows,days){const totals=new Map();for(const r of rows){const v=totals.get(r.date)||[0,0];if(r.position!==null){v[0]+=r.position;v[1]++;}totals.set(r.date,v);}return days.map(d=>{const v=totals.get(d);return v&&v[1]?v[0]/v[1]:null;});}
-function clearPrivate(){setWorkspaceLoading(false);generation++;ready=false;activeAccount=null;state=emptyState();marketRecords=[];keywordRecords=[];document.querySelector('.app').hidden=true;for(const chart of [monthChart,historyChart,reportChart,rankDonut])chart?.destroy();monthChart=historyChart=reportChart=rankDonut=null;document.querySelectorAll('tbody,.keyword-list,#latestSnapshot,#donutLegend,#dashReportStats,#reportStats,#dataInfo').forEach(el=>el.replaceChildren());$('accountSelect').replaceChildren();}
-async function allRows(table,companyId){let rows=[];for(let from=0;;from+=1000){let q=db.from(table).select('*').order('id').range(from,from+999);if(companyId)q=q.eq('company_id',companyId);const page=check(await q);rows.push(...page);if(page.length<1000)return rows;}}
+function clearPrivate(){clearTimeout(dateAccessTimer);loadedAccessDate='';setWorkspaceLoading(false);generation++;ready=false;activeAccount=null;state=emptyState();marketRecords=[];keywordRecords=[];document.querySelector('.app').hidden=true;for(const chart of [monthChart,historyChart,reportChart,rankDonut])chart?.destroy();monthChart=historyChart=reportChart=rankDonut=null;document.querySelectorAll('tbody,.keyword-list,#latestSnapshot,#donutLegend,#dashReportStats,#reportStats,#dataInfo').forEach(el=>el.replaceChildren());$('accountSelect').replaceChildren();}
+async function allRows(table,companyId){let rows=[];for(let from=0;;from+=1000){let q=db.from(table).select('*').order('id').range(from,from+999);if(companyId)q=q.eq('company_id',companyId);if(table==='rankings'&&isCoAdmin())q=q.eq('ranking_date',dubaiToday());const page=check(await q);rows.push(...page);if(page.length<1000)return rows;}}
 async function loadCompany(id){
  if(!companies.some(c=>c.id===id))throw Error('Company access is not available.');
  const ticket=++generation; ready=false;activeAccount=id;state=emptyState();marketRecords=[];keywordRecords=[];
@@ -56,14 +81,15 @@ async function loadCompany(id){
  if(ticket!==generation||!user)return;
  marketRecords=ms;keywordRecords=ks;const markets=new Map(ms.map(m=>[m.id,m.name])),keywords=new Map(ks.map(k=>[k.id,k.keyword]));
  if([...ms,...ks,...rs].some(r=>r.company_id!==id))throw Error('Unexpected company data. Please reload.');
- state={markets:ms.map(m=>m.name),keywords:ks.map(k=>({id:k.id,market_id:k.market_id,name:k.keyword,market:markets.get(k.market_id)||'',addedAt:k.created_at.slice(0,10)})),sheets:[],rows:rs.map(r=>({id:r.id,market_id:r.market_id,keyword_id:r.keyword_id,date:r.ranking_date,month:r.ranking_date.slice(0,7),country:markets.get(r.market_id)||'',keyword:keywords.get(r.keyword_id)||'',position:r.position,source:r.source}))};
+ const visibleRankings=isCoAdmin()?rs.filter(r=>r.ranking_date===dubaiToday()):rs;
+ state={markets:ms.map(m=>m.name),keywords:ks.map(k=>({id:k.id,market_id:k.market_id,name:k.keyword,market:markets.get(k.market_id)||'',addedAt:k.created_at.slice(0,10)})),sheets:[],rows:visibleRankings.map(r=>({id:r.id,market_id:r.market_id,keyword_id:r.keyword_id,date:r.ranking_date,month:r.ranking_date.slice(0,7),country:markets.get(r.market_id)||'',keyword:keywords.get(r.keyword_id)||'',position:r.position,source:r.source}))};
  // Clear every page on reload; render other pages only when opened.
  document.querySelectorAll('.filters input').forEach(el=>el.value='');
  document.querySelector('.app').hidden=false;
- rebuildFilters();$('accountSelect').value=id;$('entryAccount').textContent=companyLabel();$('pageDesc').textContent=companyLabel();
- $('sessionLabel').textContent=`${user.email||'Signed in'} · ${canWrite()?'Editor':'Read only'}`;
+ rebuildFilters();$('accountSelect').value=id;$('entryAccount').textContent=companyLabel();$('pageDesc').textContent=pageDescription();
+ $('sessionLabel').textContent=`${user.app_metadata?.username||user.email?.split('@')[0]||'Signed in'} · ${isCoAdmin()?'Co-admin · Today only':canWrite()?'Admin':'Read only'}`;
  document.querySelectorAll('#entry button,#keywords button,#markets button,#import button,#fileInput').forEach(el=>el.disabled=!canWrite());
- ready=true;document.querySelector('.app').hidden=false;$('authScreen').hidden=true;
+ applyRoleUI();ready=true;document.querySelector('.app').hidden=false;$('authScreen').hidden=true;
 }
 async function switchAccount(id){if(busy||!user)return;setBusy(true);notify('');setWorkspaceLoading(true);try{await loadCompany(id);notify('');}catch(e){ready=false;state=emptyState();document.querySelector('.app').hidden=true;$('authScreen').hidden=false;authMessage('Unable to load company: '+e.message+'. Sign in again to retry.');}finally{setWorkspaceLoading(false);setBusy(false);}}
 async function openSession(session){
@@ -71,7 +97,7 @@ async function openSession(session){
  const ticket=++generation;user=session.user;setBusy(true);notify('');setWorkspaceLoading(true);
  try{const [cs,ms]=await Promise.all([allRows('companies'),db.from('company_members').select('company_id,role').eq('user_id',user.id).then(check)]);
   if(ticket!==generation)return;companies=cs;memberships=ms;$('authSignout').hidden=false;
-  if(!cs.length){clearPrivate();$('authScreen').hidden=false;authMessage('Signed in, but no company membership has been assigned. Ask your administrator to grant access to TROLLEYS or PRODUCTS.');return;}
+  if(!cs.length){clearPrivate();$('authScreen').hidden=false;authMessage('Signed in, but no company membership has been assigned. Ask your administrator to assign company access.');return;}
   $('accountSelect').innerHTML=cs.map(c=>`<option value="${esc(c.id)}">${esc(c.domain+' — '+c.name)}</option>`).join('');
   const defaultCompany=cs.find(c=>c.domain.toLowerCase()==='carwashtrolley.com')||cs[0];
   await loadCompany(defaultCompany.id);
@@ -243,23 +269,24 @@ function setupManualSearch(){
 function wireUI(){
  setupEntryKeywordSearch();
  setupManualSearch();
+ document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshDateAccess();});
  document.addEventListener('change',e=>{if(e.target.closest('.filters'))pageOffsets.clear();},true);
  document.addEventListener('input',e=>{if(e.target.id==='rankSearch')pageOffsets.clear();},true);
  const actions={logout,goToReports,generateCurrentPDF,saveManualEntry,addKeyword,addMarket,clearData};document.querySelectorAll('[data-action]').forEach(el=>el.onclick=actions[el.dataset.action]);$('accountSelect').onchange=e=>switchAccount(e.target.value);
  const titles={dashboard:'SERP Dashboard',rankings:'Daily Rankings',history:'Keyword History',reports:'Monthly Reports',entry:'Manual SERP Entry',keywords:'Keyword Management',markets:'Countries / Markets',import:'Import / Data'};
- document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>{if(!ready)return;document.querySelectorAll('.nav button,.page').forEach(x=>x.classList.remove('active'));b.classList.add('active');$(b.dataset.page).classList.add('active');$('pageTitle').textContent=titles[b.dataset.page];$('pageDesc').textContent=companyLabel();renderActivePage();});
+ document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>{if(!ready||(isCoAdmin()&&!['dashboard','rankings'].includes(b.dataset.page)))return;document.querySelectorAll('.nav button,.page').forEach(x=>x.classList.remove('active'));b.classList.add('active');$(b.dataset.page).classList.add('active');$('pageTitle').textContent=titles[b.dataset.page];$('pageDesc').textContent=pageDescription();renderActivePage();});
  for(const id of ['rankMonth','rankCountry','rankDate'])$(id).onchange=renderRankings;$('rankSearch').oninput=renderRankings;
  for(const id of ['histKeyword','histCountry','histFrom','histTo'])$(id).onchange=renderHistory;
  for(const id of ['reportMonth','reportCountry'])$(id).onchange=renderReport;
  for(const id of ['dashMonth','dashCountry'])$(id).onchange=updateDashboard;
  $('entryDate').onchange=renderEntry;$('entryKeyword').onchange=renderEntry;$('entryCountry').onchange=()=>{refreshEntryKeywords();renderEntry();};
  $('fileInput').onchange=e=>importFile(e.target.files[0]);const drop=$('drop');for(const event of ['dragenter','dragover','dragleave','drop'])drop.addEventListener(event,e=>{e.preventDefault();drop.classList.toggle('drag',event==='dragenter'||event==='dragover');if(event==='drop')importFile(e.dataTransfer.files[0]);});
- $('authForm').onsubmit=async e=>{e.preventDefault();if(busy)return;setBusy(true);authMessage(recovery?'Updating password…':'Signing in…');try{if(recovery){check(await db.auth.updateUser({password:$('password').value}));recovery=false;$('loginButton').textContent='Sign in';authMessage('Password updated.');await openSession(check(await db.auth.getSession()).session);}else{const data=check(await db.auth.signInWithPassword({email:$('email').value,password:$('password').value}));$('password').value='';await openSession(data.session);}}catch(e){authMessage(e.message);}finally{setBusy(false);}};
- $('resetButton').onclick=async()=>{if(!$('email').checkValidity()||!$('email').value)return authMessage('Enter your email first.');try{check(await db.auth.resetPasswordForEmail($('email').value,{redirectTo:location.origin+location.pathname}));authMessage('If this account exists, a password reset link will arrive by email.');}catch(e){authMessage(e.message);}};
+ $('authForm').onsubmit=async e=>{e.preventDefault();if(busy)return;setBusy(true);authMessage(recovery?'Updating password…':'Signing in…');try{if(recovery){check(await db.auth.updateUser({password:$('password').value}));recovery=false;$('loginButton').textContent='Sign in';authMessage('Password updated.');await openSession(check(await db.auth.getSession()).session);}else{const data=check(await db.auth.signInWithPassword({email:usernameEmail($('email').value),password:$('password').value}));$('password').value='';await openSession(data.session);}}catch(e){authMessage(e.message);}finally{setBusy(false);}};
+ $('resetButton').onclick=()=>authMessage('Contact your administrator to reset your username account password.');
  $('authSignout').onclick=logout;
 }
 async function boot(){wireUI();$('loader').classList.add('hide');try{if(!window.supabase)throw Error('The website libraries failed to load. Reload to retry.');db=supabase.createClient(SERP_CONFIG.url,SERP_CONFIG.publishableKey,{auth:{persistSession:true,storage:sessionStorage,autoRefreshToken:true,detectSessionInUrl:true},global:{fetch:async(input,options={})=>fetch(input,{...options,signal:options.signal||AbortSignal.timeout(30000)})}});
- db.auth.onAuthStateChange((event,session)=>{if(event==='SIGNED_OUT'){user=null;clearPrivate();$('authScreen').hidden=false;}if(event==='PASSWORD_RECOVERY'){recovery=true;clearPrivate();user=session.user;$('authScreen').hidden=false;$('email').value=session.user.email;$('password').value='';$('password').autocomplete='new-password';$('loginButton').textContent='Set new password';authMessage('Enter a new password to finish account setup or recovery.');}});
+ db.auth.onAuthStateChange((event,session)=>{if(event==='SIGNED_OUT'){user=null;clearPrivate();$('authScreen').hidden=false;}if(event==='PASSWORD_RECOVERY'){recovery=true;clearPrivate();user=session.user;$('authScreen').hidden=false;$('email').value=session.user.app_metadata?.username||session.user.email.split('@')[0];$('password').value='';$('password').autocomplete='new-password';$('loginButton').textContent='Set new password';authMessage('Enter a new password to finish account setup or recovery.');}});
  const data=check(await db.auth.getSession());if(!recovery)await openSession(data.session);
  document.modelContext?.registerTool({name:'read_serp_workspace_summary',description:'Read counts for the signed-in, currently selected SERP company.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true,untrustedContentHint:true},execute(input){if(Object.keys(input||{}).length||!ready||!user)throw Error('A loaded authenticated workspace and empty input are required.');return {company:companyLabel(),markets:state.markets.length,keywords:state.keywords.length,rankings:state.rows.length};}});
  }catch(e){authMessage(e.message);}}
