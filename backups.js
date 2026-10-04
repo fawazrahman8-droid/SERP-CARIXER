@@ -47,28 +47,30 @@ const WeeklyBackup=(()=>{
   if(ws['!ref']&&rows.length)ws['!autofilter']={ref:ws['!ref']};
   X.utils.book_append_sheet(wb,ws,name);
  }
+ function companyLabel(c){return c.domain||c.name||c.slug||'Company';}
  async function build(cs,scheduled,valid){
   const X=await ensureExcelLibrary(),wb=X.utils.book_new(),started=new Date().toISOString();
   sheet(X,wb,'Backup Info',[
-   {Item:'Generated UTC',Value:started},{Item:'Scheduled UAE',Value:new Date(scheduled+4*3600000).toISOString().slice(0,16)+' UAE'},
-   {Item:'Scope',Value:'Companies where this account is an admin or co-admin; all dates.'},
-   {Item:'Snapshot',Value:'Current data fetched at generation time. Reads are sequential, not an atomic database snapshot.'},
-   {Item:'Recovery',Value:'Raw identifiers retained. Restore requires administrator assistance; do not use normal ranking import.'},
-   {Item:'Privacy',Value:'Private company data. Store this workbook securely.'}
+   {Item:'Generated on',Value:new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Dubai',dateStyle:'medium',timeStyle:'short'}).format(new Date(started))+' GST'},
+   {Item:'Scheduled backup',Value:new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Dubai',dateStyle:'medium',timeStyle:'short'}).format(new Date(scheduled))+' GST'},
+   {Item:'Companies included',Value:cs.map(companyLabel).join(', ')},
+   {Item:'Workbook contents',Value:'Company names, countries / markets, keywords, and ranking positions for all dates.'}
   ],['Item','Value']);
-  sheet(X,wb,'Companies',cs,['id','slug','name','domain']);
+  sheet(X,wb,'Companies',cs.map(c=>({Company:companyLabel(c),Website:c.domain||''})),['Company','Website']);
   for(let i=0;i<cs.length;i++){
    const c=cs[i];if(!valid())throw Error('Session changed. Retry after signing in.');
-   for(const [table,headers] of [
-    ['markets',['id','company_id','name','created_at']],
-    ['keywords',['id','company_id','market_id','keyword','created_at']],
-    ['rankings',['id','company_id','market_id','keyword_id','ranking_date','position','source','created_at','updated_at']]
-   ]){
-    const rows=await allRows(table,c.id);
-    if(!valid()||rows.some(r=>r.company_id!==c.id))throw Error('Company access changed. No download created.');
-    if(rows.length>1048575)throw Error('Excel row limit exceeded. Contact your administrator.');
-    sheet(X,wb,(i+1)+' '+table,rows,headers);
-   }
+   const markets=await allRows('markets',c.id);
+   if(!valid()||markets.some(r=>r.company_id!==c.id))throw Error('Company access changed. No download created.');
+   const keywords=await allRows('keywords',c.id);
+   if(!valid()||keywords.some(r=>r.company_id!==c.id))throw Error('Company access changed. No download created.');
+   const rankings=await allRows('rankings',c.id);
+   if(!valid()||rankings.some(r=>r.company_id!==c.id))throw Error('Company access changed. No download created.');
+   for(const rows of [markets,keywords,rankings])if(rows.length>1048575)throw Error('Excel row limit exceeded. Contact your administrator.');
+   const marketById=new Map(markets.map(m=>[m.id,m.name||'Unknown market']));
+   const keywordById=new Map(keywords.map(k=>[k.id,{keyword:k.keyword||'Unknown keyword',market:marketById.get(k.market_id)||'Unknown market'}]));
+   sheet(X,wb,(i+1)+' Markets',markets.map(m=>({Company:companyLabel(c),Market:m.name||'Unknown market'})),['Company','Market']);
+   sheet(X,wb,(i+1)+' Keywords',keywords.map(k=>({Company:companyLabel(c),Market:marketById.get(k.market_id)||'Unknown market',Keyword:k.keyword||'Unknown keyword'})),['Company','Market','Keyword']);
+   sheet(X,wb,(i+1)+' Rankings',rankings.map(r=>{const k=keywordById.get(r.keyword_id);return {Company:companyLabel(c),Market:marketById.get(r.market_id)||k?.market||'Unknown market',Keyword:k?.keyword||'Unknown keyword',Date:r.ranking_date, 'Google Position':r.position==null?'Not Ranked':r.position,Source:r.source||''};}),['Company','Market','Keyword','Date','Google Position','Source']);
   }
   return {X,wb};
  }
