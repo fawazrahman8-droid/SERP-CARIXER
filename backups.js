@@ -114,7 +114,7 @@ const WeeklyBackup=(()=>{
  }
  function start(){
   const panel=document.createElement('div');panel.id='weeklyBackupPanel';panel.className='panel';panel.hidden=true;
-  panel.innerHTML='<p id="backupStatus" role="status"></p><button type="button" class="btn" id="backupDownload">Download backup now</button><div class="tablewrap" style="margin-top:16px"><table><thead><tr><th>Scheduled (UAE)</th><th>Recorded (UAE)</th><th>Status</th><th>File</th><th>Details</th></tr></thead><tbody id="backupHistoryRows"></tbody></table></div>';
+  panel.innerHTML='<p id="backupStatus" role="status"></p><button type="button" class="btn" id="backupDownload">Download backup now</button><div class="tablewrap" style="margin-top:16px"><table><thead><tr><th>Scheduled</th><th>Recorded</th><th>Status</th><th>File</th><th>Details</th></tr></thead><tbody id="backupHistoryRows"></tbody></table></div>';
   const sidebar=document.querySelector('.sidebar');
   if(sidebar){
    sidebar.style.display='flex';sidebar.style.flexDirection='column';
