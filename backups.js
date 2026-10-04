@@ -114,21 +114,22 @@ const WeeklyBackup=(()=>{
  }
  function start(){
   const panel=document.createElement('div');panel.id='weeklyBackupPanel';panel.className='panel';panel.hidden=true;
-  panel.innerHTML='<p id="backupStatus" role="status"></p>';
+  panel.innerHTML='<p id="backupStatus" role="status"></p><button type="button" class="btn" id="backupDownload">Download backup now</button><div class="tablewrap" style="margin-top:16px"><table><thead><tr><th>Scheduled (UAE)</th><th>Recorded (UAE)</th><th>Status</th><th>File</th><th>Details</th></tr></thead><tbody id="backupHistoryRows"></tbody></table></div>';
   const sidebar=document.querySelector('.sidebar');
   if(sidebar){
    sidebar.style.display='flex';sidebar.style.flexDirection='column';
    const footer=document.createElement('div');footer.style.cssText='margin-top:auto;padding:24px 8px 12px;border-top:1px solid #334155';
-   const button=document.createElement('button');button.id='backupHistoryButton';button.type='button';button.className='btn';button.textContent='Backup Schedule';button.hidden=true;footer.append(button);sidebar.append(footer);
+   const button=document.createElement('button');button.id='backupHistoryButton';button.type='button';button.className='btn';button.textContent='Backup History';button.hidden=true;footer.append(button);sidebar.append(footer);
    const dialog=document.createElement('dialog');dialog.id='backupHistoryDialog';dialog.className='panel';dialog.style.cssText='width:min(1100px,94vw);max-height:85vh;overflow:auto;color:var(--text);background:var(--card);border:1px solid var(--line);border-radius:14px';
-   dialog.innerHTML='<div class="sectiontitle"><h2>Backup Schedule</h2><button type="button" class="btn" id="closeBackupHistory">Close</button></div>';
+   dialog.innerHTML='<div class="sectiontitle"><h2>Backup History</h2><button type="button" class="btn" id="closeBackupHistory">Close</button></div>';
    document.body.append(dialog);dialog.append(panel);
-   button.onclick=()=>{if(!user||!ready||!scope().length)return;message();dialog.showModal();checkDue();};
+   button.onclick=()=>{if(!user||!ready||!scope().length)return;message();renderHistory();dialog.showModal();checkDue();};
    document.getElementById('closeBackupHistory').onclick=()=>dialog.close();
    new MutationObserver(syncHistoryAccess).observe(document.querySelector('.app'),{attributes:true,attributeFilter:['hidden']});
    window.addEventListener('storage',syncHistoryAccess);
   }else document.getElementById('import').append(panel);
   const download=document.getElementById('backupDownload');if(download)download.onclick=()=>checkDue(true);
+  renderHistory();
   setInterval(()=>checkDue(),30000);
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkDue();});
   window.addEventListener('focus',()=>checkDue());
