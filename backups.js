@@ -21,7 +21,7 @@ const WeeklyBackup=(()=>{
  function syncHistoryAccess(){
   const allowed=!!user&&ready&&scope().length>0;
   const button=document.getElementById('backupHistoryButton');if(button)button.hidden=!allowed;
-  const dialog=document.getElementById('backupHistoryDialog');if(!allowed&&dialog?.open){dialog.close();document.getElementById('backupHistoryRows').replaceChildren();}
+  const dialog=document.getElementById('backupHistoryDialog');if(!allowed&&dialog?.open)dialog.close();
  }
 
  function latestSlot(now=Date.now()){
@@ -31,7 +31,16 @@ const WeeklyBackup=(()=>{
   return slot;
  }
  function scope(){return companies.filter(c=>memberships.some(m=>m.company_id===c.id&&['owner','co_admin'].includes(m.role))).sort((a,b)=>a.id.localeCompare(b.id));}
- function message(t){document.getElementById('backupStatus').textContent=t;}
+ function nextDueTime(){
+  const slot=latestSlot();let firstDue=slot+WEEK;
+  try{const saved=JSON.parse(localStorage.getItem(KEY+':'+scope().map(c=>c.id).join(','))||'null');if(saved?.firstDue)firstDue=saved.firstDue;}catch{}
+  return Math.max(firstDue,slot+WEEK);
+ }
+ function message(){
+  const status=document.getElementById('backupStatus');if(!status)return;
+  const value=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Dubai',weekday:'long',day:'numeric',month:'long',year:'numeric',hour:'numeric',minute:'2-digit',hour12:true}).format(new Date(nextDueTime()));
+  status.textContent='Next backup: '+value+' UAE time';
+ }
  function sheet(X,wb,name,rows,headers){
   const ws=X.utils.json_to_sheet(rows,{header:headers});
   ws['!cols']=headers.map(h=>({wch:/keyword|domain|name/i.test(h)?36:/id/.test(h)?38:24}));
@@ -50,7 +59,6 @@ const WeeklyBackup=(()=>{
   sheet(X,wb,'Companies',cs,['id','slug','name','domain']);
   for(let i=0;i<cs.length;i++){
    const c=cs[i];if(!valid())throw Error('Session changed. Retry after signing in.');
-   message('Preparing Excel: '+c.domain+'…');
    for(const [table,headers] of [
     ['markets',['id','company_id','name','created_at']],
     ['keywords',['id','company_id','market_id','keyword','created_at']],
@@ -69,9 +77,10 @@ const WeeklyBackup=(()=>{
   if(!panel)return;
   syncHistoryAccess();const cs=scope();panel.hidden=!user||!ready||!cs.length;
   // The main role renderer disables import buttons; this is an admin/co-admin export action.
-  document.getElementById('backupDownload').disabled=running||!cs.length;
+  const download=document.getElementById('backupDownload');if(download)download.disabled=running||!cs.length;
+  message();
   if(panel.hidden||busy||running||(!manual&&Date.now()<retryAfter))return;
-  if(!navigator.locks){message('Automatic backups need a browser with Web Locks support, such as current Chrome or Edge.');return;}
+  if(!navigator.locks)return;
   running=true;let attempt=null,attemptSlot=null;
   try{
    await navigator.locks.request(KEY,{ifAvailable:true},async lock=>{
@@ -87,7 +96,7 @@ const WeeklyBackup=(()=>{
     if(saved.lastRequested&&!events().some(x=>x.scheduled===saved.lastRequested&&/requested/i.test(x.status)))log('Previously requested',saved.lastRequested,'Imported from the earlier schedule tracker; exact time and filename are unavailable.');
     const first=Math.max(saved.firstDue,saved.lastRequested+WEEK,slot-51*WEEK);
     for(let missed=first;missed<slot;missed+=WEEK)if(!events().some(x=>x.scheduled===missed))log('Missed',missed,'No download request recorded in this browser. Historical snapshots cannot be recreated.');
-    if(!manual&&!due){message('Automatic Excel download: Saturdays, 5:00 PM UAE. Next due: '+new Date(Math.max(saved.firstDue,slot+WEEK)+4*3600000).toISOString().slice(0,10)+'.'+(saved.lastRequested?' Last download requested: '+new Date(saved.lastRequested+4*3600000).toISOString().slice(0,10)+'.':''));return;}
+    if(!manual&&!due){message();return;}
     // Recheck current server membership before exporting, in addition to table RLS.
     attemptSlot=due?slot:null;attempt=log('Preparing',attemptSlot,manual?'Manual backup':Date.now()-slot>60000?'Late run: exporting current data after a missed schedule.':'Scheduled backup');
     const fresh=check(await db.from('company_members').select('company_id,role').eq('user_id',uid));
@@ -98,29 +107,28 @@ const WeeklyBackup=(()=>{
     const filename='SERP-Backup-'+stamp+'.xlsx';X.writeFile(wb,filename,{compression:true});
     log('Download requested',attemptSlot,'Check your Downloads folder. Browser save completion is not verifiable.'+(due&&Date.now()-slot>60000?' Late run; contains current data.':''),filename,attempt);
     if(due){saved.lastRequested=slot;localStorage.setItem(key,JSON.stringify(saved));}
-    message('Excel download requested. Check Downloads. If the browser blocked it, allow downloads and click Download backup now.');
-    toast('Excel backup download requested — check Downloads.');
+    message();
    });
-  }catch(e){if(attempt){try{log('Failed',attemptSlot,e.message,'',attempt);}catch{}}retryAfter=Date.now()+5*60000;message('Backup not completed: '+e.message+' Use Download backup now to retry.');}
-  finally{running=false;document.getElementById('backupDownload').disabled=false;}
+  }catch(e){if(attempt){try{log('Failed',attemptSlot,e.message,'',attempt);}catch{}}retryAfter=Date.now()+5*60000;message();}
+  finally{running=false;const download=document.getElementById('backupDownload');if(download)download.disabled=false;}
  }
  function start(){
   const panel=document.createElement('div');panel.id='weeklyBackupPanel';panel.className='panel';panel.hidden=true;
-  panel.innerHTML='<h3>Weekly Excel backup</h3><p>Every Saturday at 5:00 PM UAE time. Keep this computer awake, signed in as an admin or co-admin, and this website open. Allow browser downloads. A missed run exports current data at your next visit.</p><p>Includes all dates for your assigned company accounts. This browser remembers download requests; it cannot confirm that a file was saved. Clearing browser data resets the schedule.</p><p id="backupStatus" role="status"></p><button type="button" class="btn" id="backupDownload">Download backup now</button>';
+  panel.innerHTML='<p id="backupStatus" role="status"></p>';
   const sidebar=document.querySelector('.sidebar');
   if(sidebar){
    sidebar.style.display='flex';sidebar.style.flexDirection='column';
    const footer=document.createElement('div');footer.style.cssText='margin-top:auto;padding:24px 8px 12px;border-top:1px solid #334155';
-   const button=document.createElement('button');button.id='backupHistoryButton';button.type='button';button.className='btn';button.textContent='Backup History';button.hidden=true;footer.append(button);sidebar.append(footer);
+   const button=document.createElement('button');button.id='backupHistoryButton';button.type='button';button.className='btn';button.textContent='Backup Schedule';button.hidden=true;footer.append(button);sidebar.append(footer);
    const dialog=document.createElement('dialog');dialog.id='backupHistoryDialog';dialog.className='panel';dialog.style.cssText='width:min(1100px,94vw);max-height:85vh;overflow:auto;color:var(--text);background:var(--card);border:1px solid var(--line);border-radius:14px';
-   dialog.innerHTML='<div class="sectiontitle"><h2>Backup History</h2><button type="button" class="btn" id="closeBackupHistory">Close</button></div><p>Saturday, 5:00 PM UAE • Admin / co-admin company accounts</p><p>History belongs to this browser only and keeps the latest 250 events. Clearing browser data removes it. A download request does not confirm that a file was saved; check Downloads. Missed weeks appear when the site next opens (up to 52 weeks).</p><div id="backupControls"></div><div class="tablewrap"><table><thead><tr><th>Scheduled (UAE)</th><th>Recorded (UAE)</th><th>Status</th><th>File</th><th>Details</th></tr></thead><tbody id="backupHistoryRows"></tbody></table></div>';
-   document.body.append(dialog);dialog.querySelector('#backupControls').append(panel);
-   button.onclick=()=>{if(!user||!ready||!scope().length)return;renderHistory();dialog.showModal();checkDue();};
+   dialog.innerHTML='<div class="sectiontitle"><h2>Backup Schedule</h2><button type="button" class="btn" id="closeBackupHistory">Close</button></div>';
+   document.body.append(dialog);dialog.append(panel);
+   button.onclick=()=>{if(!user||!ready||!scope().length)return;message();dialog.showModal();checkDue();};
    document.getElementById('closeBackupHistory').onclick=()=>dialog.close();
    new MutationObserver(syncHistoryAccess).observe(document.querySelector('.app'),{attributes:true,attributeFilter:['hidden']});
-   window.addEventListener('storage',()=>{syncHistoryAccess();renderHistory();});
+   window.addEventListener('storage',syncHistoryAccess);
   }else document.getElementById('import').append(panel);
-  document.getElementById('backupDownload').onclick=()=>checkDue(true);
+  const download=document.getElementById('backupDownload');if(download)download.onclick=()=>checkDue(true);
   setInterval(()=>checkDue(),30000);
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkDue();});
   window.addEventListener('focus',()=>checkDue());
