@@ -35,7 +35,6 @@ function rebuildFilters(opts={}){
   fillSelect('rankMonth',ym.map(x=>[x,x]),true);fillSelect('reportMonth',ym.map(x=>[x,x]),true);fillSelect('dashMonth',ym.map(x=>[x,x]),true);
   fillSelect('rankCountry',countries.map(x=>[x,x]),true);fillSelect('reportCountry',countries.map(x=>[x,x]),true);fillSelect('dashCountry',countries.map(x=>[x,x]),true);
   fillSelect('histCountry',countries.map(x=>[x,x]),true);fillSelect('histKeyword',kws.map(x=>[x,x]),false);fillSelect('entryKeyword',kws.map(x=>[x,x]),false);fillSelect('entryCountry',countries.map(x=>[x,x]),false);fillSelect('keywordMarket',countries.map(x=>[x,x]),false);
-  fillSelect('rankDate',dates.map(x=>[x,x]),true);
   ['rankMonth','reportMonth','dashMonth'].forEach(id=>{let el=document.getElementById(id);if(el&&ym.length&&!el.value)el.value=ym[0]});
   ['rankCountry','reportCountry','dashCountry','histCountry'].forEach(id=>{let el=document.getElementById(id);if(el&&(!el.value||![...el.options].some(o=>o.value===el.value)))el.value='ALL'});
   if(document.getElementById('entryCountry')&&countries.length&&!document.getElementById('entryCountry').value)document.getElementById('entryCountry').value=countries[0];
