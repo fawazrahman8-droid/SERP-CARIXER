@@ -38,7 +38,7 @@
 </head>
 <body>
 <div class="loader" id="loader"><div class="loader-inner"><div class="loader-logo">SERP <span>TRACK</span></div><div class="loader-bar"><i></i></div><div style="font-size:12px;color:#94a3b8">Loading ranking workspace...</div></div></div>
-<section id="authScreen" class="auth-screen"><form id="authForm" class="auth-card"><div class="loader-logo">SERP <span>TRACK</span></div><h1>Sign in to your workspace</h1><p>Private ranking data for your company accounts.</p><label for="email">Email</label><input id="email" type="email" autocomplete="username" required><label for="password">Password</label><input id="password" type="password" autocomplete="current-password" required minlength="6"><button class="btn primary" id="loginButton">Sign in</button><button type="button" class="btn" id="resetButton">Forgot password?</button><button type="button" class="btn" id="authSignout" hidden>Sign out</button><p id="authMessage" role="status" aria-live="polite">Use the account provisioned by your administrator.</p></form></section>
+<section id="authScreen" class="auth-screen"><form id="authForm" class="auth-card"><div class="loader-logo">SERP <span>TRACK</span></div><h1>Sign in to your workspace</h1><p>Private ranking data for your company accounts.</p><label for="email">Username</label><input id="email" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="e.g. rayan.carixer" minlength="3" maxlength="40" required><label for="password">Password</label><input id="password" type="password" autocomplete="current-password" required minlength="6"><button class="btn primary" id="loginButton">Sign in</button><button type="button" class="btn" id="resetButton">Login help</button><button type="button" class="btn" id="authSignout" hidden>Sign out</button><p id="authMessage" role="status" aria-live="polite">Use the account provisioned by your administrator.</p></form></section>
 <div id="notice" role="status" aria-live="polite" hidden></div>
 <div class="app" hidden>
 <aside class="sidebar">
@@ -165,3 +165,4 @@
 <script src="cloud.js"></script>
 </body>
 </html>
+
