@@ -32,13 +32,14 @@
 .ranking-filters .ranking-search{grid-column:1/-1}
 .ranking-filters select:focus-visible,.ranking-filters input:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
 @media(max-width:600px){.ranking-filters{grid-template-columns:1fr;gap:12px}}
+.password-field{position:relative}.auth-card .password-field input{padding-right:78px}.auth-card .password-field button{position:absolute;right:6px;top:50%;transform:translateY(-50%);margin:0;padding:6px 10px;font-size:12px}
 </style>
 <link rel="stylesheet" href="cloud.css">
 <script src="theme.js"></script>
 </head>
 <body>
 <div class="loader" id="loader"><div class="loader-inner"><div class="loader-logo">SERP <span>TRACK</span></div><div class="loader-bar"><i></i></div><div style="font-size:12px;color:#94a3b8">Loading ranking workspace...</div></div></div>
-<section id="authScreen" class="auth-screen"><form id="authForm" class="auth-card"><div class="loader-logo">SERP <span>TRACK</span></div><h1>Sign in to your workspace</h1><p>Private ranking data for your company accounts.</p><label for="email">Username</label><input id="email" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="e.g. rayan.carixer" minlength="3" maxlength="40" required><label for="password">Password</label><input id="password" type="password" autocomplete="current-password" required minlength="6"><button class="btn primary" id="loginButton">Sign in</button><button type="button" class="btn" id="resetButton">Login help</button><button type="button" class="btn" id="authSignout" hidden>Sign out</button><p id="authMessage" role="status" aria-live="polite">Use the account provisioned by your administrator.</p></form></section>
+<section id="authScreen" class="auth-screen"><form id="authForm" class="auth-card"><div class="loader-logo">SERP <span>TRACK</span></div><h1>Sign in to your workspace</h1><p>Private ranking data for your company accounts.</p><label for="email">Username</label><input id="email" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" minlength="3" maxlength="40" required><label for="password">Password</label><div class="password-field"><input id="password" type="password" autocomplete="current-password" required minlength="6"><button type="button" class="btn" id="togglePassword" aria-controls="password" aria-label="Show password" aria-pressed="false">Show</button></div><button class="btn primary" id="loginButton">Sign in</button><button type="button" class="btn" id="resetButton">Login help</button><button type="button" class="btn" id="authSignout" hidden>Sign out</button><p id="authMessage" role="status" aria-live="polite">Use the account provisioned by your administrator.</p></form></section>
 <div id="notice" role="status" aria-live="polite" hidden></div>
 <div class="app" hidden>
 <aside class="sidebar">
