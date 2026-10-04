@@ -105,7 +105,7 @@ async function openSession(session){
   await loadCompany(defaultCompany.id);
  }catch(e){clearPrivate();$('authScreen').hidden=false;authMessage('Workspace could not load: '+e.message);}finally{setWorkspaceLoading(false);setBusy(false);notify('');}
 }
-async function logout(){clearPrivate();user=null;$('authScreen').hidden=false;authMessage('Signed out.');try{check(await db.auth.signOut({scope:'local'}));}catch(e){authMessage('Workspace cleared. Sign-out failed: '+e.message+' Close this tab to discard its session.');}}
+async function logout(){clearPrivate();user=null;$('authSignout').hidden=true;$('authScreen').hidden=false;authMessage('Signed out.');try{check(await db.auth.signOut({scope:'local'}));}catch(e){authMessage('Workspace cleared. Sign-out failed: '+e.message+' Close this tab to discard its session.');}}
 async function mutate(action,message,allowTodayInsert=false){
  if(busy)return;if(!ready||!user||!(canWrite()||(allowTodayInsert&&isCoAdmin()))){notify('An owner or editor membership is required.');return;}
  const id=activeAccount,ticket=generation;let saved=false;setBusy(true);notify('Saving…');
@@ -292,7 +292,7 @@ function wireUI(){
  $('authSignout').onclick=logout;
 }
 async function boot(){wireUI();$('loader').classList.add('hide');try{if(!window.supabase)throw Error('The website libraries failed to load. Reload to retry.');db=supabase.createClient(SERP_CONFIG.url,SERP_CONFIG.publishableKey,{auth:{persistSession:true,storage:sessionStorage,autoRefreshToken:true,detectSessionInUrl:true},global:{fetch:async(input,options={})=>fetch(input,{...options,signal:options.signal||AbortSignal.timeout(30000)})}});
- db.auth.onAuthStateChange((event,session)=>{if(event==='SIGNED_OUT'){user=null;clearPrivate();$('authScreen').hidden=false;}if(event==='PASSWORD_RECOVERY'){recovery=true;clearPrivate();user=session.user;$('authScreen').hidden=false;$('email').value=session.user.app_metadata?.username||session.user.email.split('@')[0];$('password').value='';$('password').autocomplete='new-password';$('loginButton').textContent='Set new password';authMessage('Enter a new password to finish account setup or recovery.');}});
+ db.auth.onAuthStateChange((event,session)=>{if(event==='SIGNED_OUT'){user=null;$('authSignout').hidden=true;clearPrivate();$('authScreen').hidden=false;}if(event==='PASSWORD_RECOVERY'){recovery=true;clearPrivate();user=session.user;$('authScreen').hidden=false;$('email').value=session.user.app_metadata?.username||session.user.email.split('@')[0];$('password').value='';$('password').autocomplete='new-password';$('loginButton').textContent='Set new password';authMessage('Enter a new password to finish account setup or recovery.');}});
  const data=check(await db.auth.getSession());if(!recovery)await openSession(data.session);
  document.modelContext?.registerTool({name:'read_serp_workspace_summary',description:'Read counts for the signed-in, currently selected SERP company.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true,untrustedContentHint:true},execute(input){if(Object.keys(input||{}).length||!ready||!user)throw Error('A loaded authenticated workspace and empty input are required.');return {company:companyLabel(),markets:state.markets.length,keywords:state.keywords.length,rankings:state.rows.length};}});
  }catch(e){authMessage(e.message);}}
