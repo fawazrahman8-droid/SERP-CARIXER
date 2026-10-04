@@ -39,7 +39,7 @@ const WeeklyBackup=(()=>{
  function message(){
   const status=document.getElementById('backupStatus');if(!status)return;
   const value=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Dubai',weekday:'long',day:'numeric',month:'long',year:'numeric',hour:'numeric',minute:'2-digit',hour12:true}).format(new Date(nextDueTime()));
-  status.textContent='Next backup: '+value+' UAE time';
+  status.textContent='Next backup: '+value+' Gulf Standard Time (GST, UTC+4)';
  }
  function sheet(X,wb,name,rows,headers){
   const ws=X.utils.json_to_sheet(rows,{header:headers});
