@@ -13,7 +13,7 @@ function canWrite(){return memberships.some(m=>m.company_id===activeAccount&&['o
 function isCoAdmin(){return memberships.some(m=>m.company_id===activeAccount&&m.role==='co_admin');}
 function dubaiToday(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Dubai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());}
 function usernameEmail(value){const username=value.trim().toLowerCase();if(!/^[a-z0-9][a-z0-9._-]{2,39}$/.test(username))throw Error('Enter your assigned username.');return username+'@users.serptrack.invalid';}
-function pageDescription(){return companyLabel()+(isCoAdmin()?' · Today only ('+dubaiToday()+', Dubai)':'');}
+function pageDescription(){return companyLabel()+(isCoAdmin()?' · Add new rankings for today ('+dubaiToday()+', Dubai)':'');}
 let dateAccessTimer=null,loadedAccessDate='';
 function refreshDateAccess(){
  if(!user||!isCoAdmin()||!loadedAccessDate||loadedAccessDate===dubaiToday())return;
@@ -23,13 +23,15 @@ function refreshDateAccess(){
 }
 function applyRoleUI(){
  const limited=isCoAdmin();loadedAccessDate=limited?dubaiToday():'';
- for(const page of ['history','reports','entry','keywords','markets','import'])document.querySelector('[data-page="'+page+'"]').hidden=limited;
- for(const id of ['rankMonth','rankDate']){$(id).parentElement.hidden=limited;$(id).disabled=limited;}
- $('monthChart').closest('.panel').hidden=limited;$('dashMonth').closest('.panel').hidden=limited;
- if(limited&&!['dashboard','rankings'].includes(document.querySelector('.page.active')?.id)){
-  document.querySelectorAll('.nav button,.page').forEach(el=>el.classList.remove('active'));
-  $('dashboard').classList.add('active');document.querySelector('[data-page="dashboard"]').classList.add('active');$('pageTitle').textContent='SERP Dashboard';renderActivePage();
- }
+ document.querySelectorAll('.nav button').forEach(el=>el.hidden=false);
+ for(const id of ['rankMonth','rankDate']){$(id).parentElement.hidden=false;$(id).disabled=false;}
+ $('monthChart').closest('.panel').hidden=false;$('dashMonth').closest('.panel').hidden=false;
+ $('entryDate').disabled=limited;
+ $('entryDate').min=limited?dubaiToday():'';$('entryDate').max=limited?dubaiToday():'';
+ if(limited)$('entryDate').value=dubaiToday();
+ document.querySelectorAll('#entry button').forEach(el=>el.disabled=!(canWrite()||limited));
+ document.querySelectorAll('#entry .danger-text').forEach(el=>el.hidden=limited);
+ if(document.querySelector('.page.active')?.id==='entry')renderEntry();
  clearTimeout(dateAccessTimer);
  if(limited)dateAccessTimer=setTimeout(refreshDateAccess,Math.max(1000,Date.parse(dubaiToday()+'T00:00:00+04:00')+86400000-Date.now()+100));
 }
@@ -71,7 +73,7 @@ function pageSlice(key,items,size,targetId,render){
 }
 function dailyAverages(rows,days){const totals=new Map();for(const r of rows){const v=totals.get(r.date)||[0,0];if(r.position!==null){v[0]+=r.position;v[1]++;}totals.set(r.date,v);}return days.map(d=>{const v=totals.get(d);return v&&v[1]?v[0]/v[1]:null;});}
 function clearPrivate(){clearTimeout(dateAccessTimer);loadedAccessDate='';setWorkspaceLoading(false);generation++;ready=false;activeAccount=null;state=emptyState();marketRecords=[];keywordRecords=[];document.querySelector('.app').hidden=true;for(const chart of [monthChart,historyChart,reportChart,rankDonut])chart?.destroy();monthChart=historyChart=reportChart=rankDonut=null;document.querySelectorAll('tbody,.keyword-list,#latestSnapshot,#donutLegend,#dashReportStats,#reportStats,#dataInfo').forEach(el=>el.replaceChildren());$('accountSelect').replaceChildren();}
-async function allRows(table,companyId){let rows=[];for(let from=0;;from+=1000){let q=db.from(table).select('*').order('id').range(from,from+999);if(companyId)q=q.eq('company_id',companyId);if(table==='rankings'&&isCoAdmin())q=q.eq('ranking_date',dubaiToday());const page=check(await q);rows.push(...page);if(page.length<1000)return rows;}}
+async function allRows(table,companyId){let rows=[];for(let from=0;;from+=1000){let q=db.from(table).select('*').order('id').range(from,from+999);if(companyId)q=q.eq('company_id',companyId);const page=check(await q);rows.push(...page);if(page.length<1000)return rows;}}
 async function loadCompany(id){
  if(!companies.some(c=>c.id===id))throw Error('Company access is not available.');
  const ticket=++generation; ready=false;activeAccount=id;state=emptyState();marketRecords=[];keywordRecords=[];
@@ -81,13 +83,13 @@ async function loadCompany(id){
  if(ticket!==generation||!user)return;
  marketRecords=ms;keywordRecords=ks;const markets=new Map(ms.map(m=>[m.id,m.name])),keywords=new Map(ks.map(k=>[k.id,k.keyword]));
  if([...ms,...ks,...rs].some(r=>r.company_id!==id))throw Error('Unexpected company data. Please reload.');
- const visibleRankings=isCoAdmin()?rs.filter(r=>r.ranking_date===dubaiToday()):rs;
+ const visibleRankings=rs;
  state={markets:ms.map(m=>m.name),keywords:ks.map(k=>({id:k.id,market_id:k.market_id,name:k.keyword,market:markets.get(k.market_id)||'',addedAt:k.created_at.slice(0,10)})),sheets:[],rows:visibleRankings.map(r=>({id:r.id,market_id:r.market_id,keyword_id:r.keyword_id,date:r.ranking_date,month:r.ranking_date.slice(0,7),country:markets.get(r.market_id)||'',keyword:keywords.get(r.keyword_id)||'',position:r.position,source:r.source}))};
  // Clear every page on reload; render other pages only when opened.
  document.querySelectorAll('.filters input').forEach(el=>el.value='');
  document.querySelector('.app').hidden=false;
  rebuildFilters();$('accountSelect').value=id;$('entryAccount').textContent=companyLabel();$('pageDesc').textContent=pageDescription();
- $('sessionLabel').textContent=`${user.app_metadata?.username||user.email?.split('@')[0]||'Signed in'} · ${isCoAdmin()?'Co-admin · Today only':canWrite()?'Admin':'Read only'}`;
+ $('sessionLabel').textContent=`${user.app_metadata?.username||user.email?.split('@')[0]||'Signed in'} · ${isCoAdmin()?'Co-admin · Today entry only':canWrite()?'Admin':'Read only'}`;
  document.querySelectorAll('#entry button,#keywords button,#markets button,#import button,#fileInput').forEach(el=>el.disabled=!canWrite());
  applyRoleUI();ready=true;document.querySelector('.app').hidden=false;$('authScreen').hidden=true;
 }
@@ -104,8 +106,8 @@ async function openSession(session){
  }catch(e){clearPrivate();$('authScreen').hidden=false;authMessage('Workspace could not load: '+e.message);}finally{setWorkspaceLoading(false);setBusy(false);notify('');}
 }
 async function logout(){clearPrivate();user=null;$('authScreen').hidden=false;authMessage('Signed out.');try{check(await db.auth.signOut({scope:'local'}));}catch(e){authMessage('Workspace cleared. Sign-out failed: '+e.message+' Close this tab to discard its session.');}}
-async function mutate(action,message){
- if(busy)return;if(!ready||!user||!canWrite()){notify('An owner or editor membership is required.');return;}
+async function mutate(action,message,allowTodayInsert=false){
+ if(busy)return;if(!ready||!user||!(canWrite()||(allowTodayInsert&&isCoAdmin()))){notify('An owner or editor membership is required.');return;}
  const id=activeAccount,ticket=generation;let saved=false;setBusy(true);notify('Saving…');
  try{await action(id);saved=true;if(ticket!==generation||id!==activeAccount||!user)return;await loadCompany(id);notify('');toast(message);}
  catch(e){if(user&&activeAccount===id){if(!saved){try{await loadCompany(id);}catch{ready=false;}}else ready=false;if(!ready){document.querySelector('.app').hidden=true;$('authScreen').hidden=false;authMessage((saved?'Your data was saved, but the page could not refresh. ':'The operation could not finish. ')+e.message+' Sign in again to reload.');}notify((saved?'Saved, but refresh failed: ':'Save did not finish: ')+e.message);}}
@@ -130,13 +132,17 @@ async function saveManualEntry(){
  if(!date||!market||!keyword)return notify('Select date, country and keyword.');
  if(position!==null&&(!Number.isInteger(position)||position<1||position>1000))return notify('Position must be a whole number from 1 to 1000, or blank for Not Ranked.');
  const k=keywordRecords.find(k=>k.keyword===keyword&&(k.market_id===market.id||k.market_id===null));if(!k)return notify('This keyword is not assigned to the selected market.');
- await mutate(async id=>{check(await db.from('rankings').upsert({company_id:id,market_id:market.id,keyword_id:k.id,ranking_date:date,position,source:'manual'},{onConflict:'keyword_id,market_id,ranking_date'}).select().single());$('entryPosition').value='';},'Ranking saved');
+ if(isCoAdmin()&&date!==dubaiToday())return notify('You can only add rankings for today in Dubai time.');
+ if(isCoAdmin()&&state.rows.some(r=>r.keyword_id===k.id&&r.market_id===market.id&&r.date===date))return notify('Already entered for today. Only an admin can change this ranking.');
+ await mutate(async id=>{const record={company_id:id,market_id:market.id,keyword_id:k.id,ranking_date:date,position,source:'manual'};
+ const query=isCoAdmin()?db.from('rankings').insert(record):db.from('rankings').upsert(record,{onConflict:'keyword_id,market_id,ranking_date'});
+ const result=await query.select().single();if(result.error?.code==='23505')throw Error('Already entered for today. Only an admin can change this ranking.');check(result);$('entryPosition').value='';},'Ranking saved',true);
 }
-function deleteButton(table,id){const b=document.createElement('button');b.className='btn sm danger-text';b.textContent='Delete';b.disabled=!canWrite();b.onclick=()=>deleteRecord(table,id);return b;}
+function deleteButton(table,id){const b=document.createElement('button');b.className='btn sm danger-text';b.textContent='Delete';b.disabled=!canWrite();b.hidden=isCoAdmin();b.onclick=()=>deleteRecord(table,id);return b;}
 function renderKeywords(){const el=$('keywordList');el.replaceChildren();$('keywordCountPill').textContent=state.keywords.length+' keywords';for(const k of pageSlice('keywords',state.keywords,100,'keywordList',renderKeywords).items){const row=document.createElement('div');row.className='keyword-row';const text=document.createElement('span');text.textContent=k.name+' · '+(k.market||'Unassigned');row.append(text,deleteButton('keywords',k.id));el.append(row);}if(!el.children.length)el.textContent='No keywords yet.';}
 function renderMarkets(){const el=$('marketList');el.replaceChildren();$('marketCountPill').textContent=marketRecords.length+' markets';for(const m of marketRecords){const row=document.createElement('div');row.className='market-row';const text=document.createElement('span');text.textContent=m.name;row.append(text,deleteButton('markets',m.id));el.append(row);}if(!el.children.length)el.textContent='No markets yet.';}
 function renderEntry(){
- if(!$('entryDate').value)$('entryDate').value=new Date().toLocaleDateString('en-CA');
+ if(isCoAdmin())$('entryDate').value=dubaiToday();else if(!$('entryDate').value)$('entryDate').value=new Date().toLocaleDateString('en-CA');
  const date=$('entryDate').value,keyword=$('entryKeyword').value,country=$('entryCountry').value;
  const el=$('entryBody');el.replaceChildren();
  const matches=state.rows.filter(r=>r.date===date&&r.keyword===keyword&&r.country===country);
@@ -274,7 +280,7 @@ function wireUI(){
  document.addEventListener('input',e=>{if(e.target.id==='rankSearch')pageOffsets.clear();},true);
  const actions={logout,goToReports,generateCurrentPDF,saveManualEntry,addKeyword,addMarket,clearData};document.querySelectorAll('[data-action]').forEach(el=>el.onclick=actions[el.dataset.action]);$('accountSelect').onchange=e=>switchAccount(e.target.value);
  const titles={dashboard:'SERP Dashboard',rankings:'Daily Rankings',history:'Keyword History',reports:'Monthly Reports',entry:'Manual SERP Entry',keywords:'Keyword Management',markets:'Countries / Markets',import:'Import / Data'};
- document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>{if(!ready||(isCoAdmin()&&!['dashboard','rankings'].includes(b.dataset.page)))return;document.querySelectorAll('.nav button,.page').forEach(x=>x.classList.remove('active'));b.classList.add('active');$(b.dataset.page).classList.add('active');$('pageTitle').textContent=titles[b.dataset.page];$('pageDesc').textContent=pageDescription();renderActivePage();});
+ document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>{if(!ready)return;document.querySelectorAll('.nav button,.page').forEach(x=>x.classList.remove('active'));b.classList.add('active');$(b.dataset.page).classList.add('active');$('pageTitle').textContent=titles[b.dataset.page];$('pageDesc').textContent=pageDescription();renderActivePage();});
  for(const id of ['rankMonth','rankCountry','rankDate'])$(id).onchange=renderRankings;$('rankSearch').oninput=renderRankings;
  for(const id of ['histKeyword','histCountry','histFrom','histTo'])$(id).onchange=renderHistory;
  for(const id of ['reportMonth','reportCountry'])$(id).onchange=renderReport;
