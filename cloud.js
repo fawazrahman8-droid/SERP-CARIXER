@@ -161,12 +161,12 @@ function refreshEntryKeywords(){fillSelect('entryKeyword',allKeywords($('entryCo
 function renderImportInfo(){$('dataInfo').textContent=state.rows.length.toLocaleString()+' ranking observations saved in Supabase for '+companyLabel()+'. Import merges by keyword, market and date; matching observations are updated.';}
 function renderRankings(){
  const rs=filtered({month:$('rankMonth').value,country:$('rankCountry').value,date:$('rankDate').value});
- const dates=[...new Set(rs.map(r=>r.date))].sort(),q=$('rankSearch').value.toLowerCase(),country=$('rankCountry').value,pairs=new Map(),positions=new Map();
+ const selectedDate=$('rankDate').value,dates=selectedDate?[selectedDate]:[...new Set(rs.map(r=>r.date))].sort(),q=$('rankSearch').value.toLowerCase(),country=$('rankCountry').value,pairs=new Map(),positions=new Map();
  for(const k of state.keywords){if((country==='ALL'||k.market===country)&&k.name.toLowerCase().includes(q))pairs.set(JSON.stringify([k.name,k.market]),{name:k.name,market:k.market});}
  for(const r of rs){if(r.keyword.toLowerCase().includes(q))pairs.set(JSON.stringify([r.keyword,r.country]),{name:r.keyword,market:r.country});positions.set(JSON.stringify([r.keyword,r.country,r.date]),r.position);}
  const datePage=pageSlice('rankingDates',dates,31,'rankHead',renderRankings),rowPage=pageSlice('rankings',[...pairs.values()],50,'rankBody',renderRankings);
  $('rankHead').innerHTML='<tr><th>Keyword</th><th>Market</th>'+datePage.items.map(d=>'<th>'+esc(d)+'</th>').join('')+'</tr>';
- $('rankBody').innerHTML=rowPage.items.map(k=>'<tr><td>'+esc(k.name)+'</td><td>'+esc(k.market)+'</td>'+datePage.items.map(d=>'<td>'+displayPosition(positions.get(JSON.stringify([k.name,k.market,d]))??null,d)+'</td>').join('')+'</tr>').join('');
+ $('rankBody').innerHTML=rowPage.items.map(k=>'<tr><td>'+esc(k.name)+'</td><td>'+esc(k.market)+'</td>'+datePage.items.map(d=>{const key=JSON.stringify([k.name,k.market,d]);return '<td>'+ (positions.has(key)?displayPosition(positions.get(key),d):'Not Ranked')+'</td>';}).join('')+'</tr>').join('');
 }
 function renderHistory(){
  const rs=filtered({keyword:$('histKeyword').value,country:$('histCountry').value}).filter(r=>(!$('histFrom').value||r.date>=$('histFrom').value)&&(!$('histTo').value||r.date<=$('histTo').value)).sort((a,b)=>a.date.localeCompare(b.date));
@@ -281,7 +281,8 @@ function wireUI(){
  const actions={logout,goToReports,generateCurrentPDF,saveManualEntry,addKeyword,addMarket,clearData};document.querySelectorAll('[data-action]').forEach(el=>el.onclick=actions[el.dataset.action]);$('accountSelect').onchange=e=>switchAccount(e.target.value);
  const titles={dashboard:'SERP Dashboard',rankings:'Daily Rankings',history:'Keyword History',reports:'Monthly Reports',entry:'Manual SERP Entry',keywords:'Keyword Management',markets:'Countries / Markets',import:'Import / Data'};
  document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>{if(!ready)return;document.querySelectorAll('.nav button,.page').forEach(x=>x.classList.remove('active'));b.classList.add('active');$(b.dataset.page).classList.add('active');$('pageTitle').textContent=titles[b.dataset.page];$('pageDesc').textContent=pageDescription();renderActivePage();});
- for(const id of ['rankMonth','rankCountry','rankDate'])$(id).onchange=renderRankings;$('rankSearch').oninput=renderRankings;
+ for(const id of ['rankMonth','rankCountry'])$(id).onchange=()=>{if(id==='rankMonth'&&$('rankDate').value&&!$('rankDate').value.startsWith($('rankMonth').value))$('rankDate').value='';renderRankings();};
+ $('rankDate').onchange=()=>{const date=$('rankDate').value;if(date){const month=date.slice(0,7),select=$('rankMonth');if(![...select.options].some(o=>o.value===month)){const option=document.createElement('option');option.value=option.textContent=month;select.append(option);}select.value=month;}renderRankings();};$('rankSearch').oninput=renderRankings;
  for(const id of ['histKeyword','histCountry','histFrom','histTo'])$(id).onchange=renderHistory;
  for(const id of ['reportMonth','reportCountry'])$(id).onchange=renderReport;
  for(const id of ['dashMonth','dashCountry'])$(id).onchange=updateDashboard;
