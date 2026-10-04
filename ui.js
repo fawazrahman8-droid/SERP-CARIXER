@@ -150,3 +150,6 @@ function generateCurrentPDF(){
   doc.save(`${activeCompany().slug}-${m}-${c==='ALL'?'All-Countries':c.replace(/\\s+/g,'-')}.pdf`);toast('PDF generated');
 }
 
+// Keep password visibility a local display preference only.
+(()=>{const field=document.getElementById('password'),toggle=document.getElementById('togglePassword');if(!field||!toggle)return;function setVisible(show){field.type=show?'text':'password';toggle.textContent=show?'Hide':'Show';toggle.setAttribute('aria-label',show?'Hide password':'Show password');toggle.setAttribute('aria-pressed',String(show));}toggle.addEventListener('click',()=>setVisible(field.type==='password'));document.getElementById('authForm').addEventListener('submit',()=>setVisible(false));})();
+
