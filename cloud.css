@@ -21,3 +21,18 @@
 .keyword-matches [role="option"]:hover,.keyword-matches [aria-selected="true"]{background:#eff6ff;color:#1d4ed8}
 .keyword-match-note{padding:12px 9px;color:#718096;font-size:12px;line-height:1.5}
 .keyword-combobox input:focus-visible{outline:2px solid #2563eb;outline-offset:2px}
+
+/* Saved appearance preference, shared across company accounts. */
+:root{color-scheme:light}
+:root[data-theme="dark"]{color-scheme:dark;--bg:#0b1220;--card:#162033;--text:#e5edf8;--muted:#a0aec0;--line:#334155;--primary:#2563eb;--primary2:#1d4ed8;--green:#4ade80;--red:#fb7185;--amber:#fbbf24}
+.theme-toggle{white-space:nowrap;min-height:40px}
+[data-theme="dark"] .panel,[data-theme="dark"] .auth-card,[data-theme="dark"] .keyword-matches{background:var(--card);color:var(--text)}
+[data-theme="dark"] .btn:not(.primary),[data-theme="dark"] input,[data-theme="dark"] select{background:#111b2c;color:var(--text);border-color:var(--line)}
+[data-theme="dark"] .btn.danger,[data-theme="dark"] .danger-text{color:var(--red)}
+[data-theme="dark"] th,[data-theme="dark"] .report-meta>div,[data-theme="dark"] .drop{background:#1b293d;color:var(--text);border-color:var(--line)}
+[data-theme="dark"] .pill,[data-theme="dark"] .drop.drag,[data-theme="dark"] .keyword-matches [role="option"]:hover,[data-theme="dark"] .keyword-matches [aria-selected="true"]{background:#1e3a5f;color:#bfdbfe}
+[data-theme="dark"] .auth-card .loader-logo{color:var(--text)}
+[data-theme="dark"] .auth-card p,[data-theme="dark"] .keyword-match-note{color:var(--muted)}
+[data-theme="dark"] input::placeholder{color:#94a3b8;opacity:1}
+[data-theme="dark"] #notice{background:#382819;color:#fed7aa;border-color:#80552c}
+[data-theme="dark"] .toast{background:#e2e8f0;color:#0f172a}
