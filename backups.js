@@ -21,9 +21,7 @@ const WeeklyBackup=(()=>{
  function syncHistoryAccess(){
   const allowed=!!user&&ready&&scope().length>0;
   const button=document.getElementById('backupHistoryButton');if(button)button.hidden=!allowed;
-  const resetButton=document.getElementById('adminPasswordResetButton');if(resetButton)resetButton.hidden=!user||!ready||!memberships.some(m=>['owner','editor'].includes(m.role));
   const dialog=document.getElementById('backupHistoryDialog');if(!allowed&&dialog?.open)dialog.close();
-  const resetDialog=document.getElementById('adminPasswordResetDialog');if(resetDialog&&(!user||!ready||!memberships.some(m=>['owner','editor'].includes(m.role)))&&resetDialog.open)resetDialog.close();
  }
 
  function latestSlot(now=Date.now()){
@@ -124,25 +122,11 @@ const WeeklyBackup=(()=>{
    sidebar.style.display='flex';sidebar.style.flexDirection='column';
    const footer=document.createElement('div');footer.style.cssText='margin-top:auto;padding:24px 8px 12px;border-top:1px solid #334155';
    const button=document.createElement('button');button.id='backupHistoryButton';button.type='button';button.className='btn';button.textContent='Backup History';button.hidden=true;footer.append(button);sidebar.append(footer);
-   const resetButton=document.createElement('button');resetButton.id='adminPasswordResetButton';resetButton.type='button';resetButton.className='btn';resetButton.textContent='Reset account password';resetButton.hidden=true;resetButton.style.marginTop='8px';footer.append(resetButton);
    const dialog=document.createElement('dialog');dialog.id='backupHistoryDialog';dialog.className='panel';dialog.style.cssText='width:min(1100px,94vw);max-height:85vh;overflow:auto;color:var(--text);background:var(--card);border:1px solid var(--line);border-radius:14px';
    dialog.innerHTML='<div class="sectiontitle"><h2>Backup History</h2><button type="button" class="btn" id="closeBackupHistory">Close</button></div>';
    document.body.append(dialog);dialog.append(panel);
    button.onclick=()=>{if(!user||!ready||!scope().length)return;message();renderHistory();dialog.showModal();checkDue();};
    document.getElementById('closeBackupHistory').onclick=()=>dialog.close();
-   const resetDialog=document.createElement('dialog');resetDialog.id='adminPasswordResetDialog';resetDialog.className='panel';resetDialog.style.cssText='width:min(520px,94vw);color:var(--text);background:var(--card);border:1px solid var(--line);border-radius:14px';
-   resetDialog.innerHTML='<div class="sectiontitle"><h2>Reset account password</h2><button type="button" class="btn" id="closePasswordReset">Close</button></div><p>Only full admins can reset a password for a user in a company they administer. Use the user ID from Supabase Authentication → Users. The new password must be at least 12 characters.</p><form id="adminPasswordResetForm"><label for="passwordResetUserId">Supabase user ID</label><input id="passwordResetUserId" autocomplete="off" required><label for="passwordResetNewPassword">New password</label><input id="passwordResetNewPassword" type="password" autocomplete="new-password" minlength="12" maxlength="128" required><p id="passwordResetStatus" role="status"></p><div class="actions"><button type="submit" class="btn primary" id="submitPasswordReset">Reset password</button></div></form>';
-   document.body.append(resetDialog);
-   resetButton.onclick=()=>{if(!user||!ready||!memberships.some(m=>['owner','editor'].includes(m.role)))return;document.getElementById('adminPasswordResetForm').reset();resetDialog.showModal();};
-   document.getElementById('closePasswordReset').onclick=()=>resetDialog.close();
-   document.getElementById('adminPasswordResetForm').onsubmit=async event=>{
-    event.preventDefault();const targetUserId=document.getElementById('passwordResetUserId').value.trim(),newPassword=document.getElementById('passwordResetNewPassword').value,status=document.getElementById('passwordResetStatus'),submit=document.getElementById('submitPasswordReset');
-    if(!user||!ready||!memberships.some(m=>['owner','editor'].includes(m.role))){status.textContent='Administrator access is required.';return;}
-    submit.disabled=true;status.textContent='Resetting password…';
-    try{const {data,error}=await db.functions.invoke('admin-reset-password',{body:{targetUserId,newPassword}});if(error)throw error;if(!data?.ok)throw Error(data?.error||'Password reset failed.');document.getElementById('passwordResetNewPassword').value='';status.textContent='Password reset successfully. Share the new password securely with the user.';}
-    catch(error){status.textContent=error.message||'Password reset failed.';}
-    finally{submit.disabled=false;}
-   };
    new MutationObserver(syncHistoryAccess).observe(document.querySelector('.app'),{attributes:true,attributeFilter:['hidden']});
    window.addEventListener('storage',syncHistoryAccess);
   }else document.getElementById('import').append(panel);
