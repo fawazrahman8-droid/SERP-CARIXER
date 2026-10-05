@@ -144,7 +144,6 @@ async function deleteRecord(table,id){
  if(!confirm('Delete this '+(table==='keywords'?'keyword and its ranking history':'record')+' from '+companyLabel()+'?'))return;
  await mutate(async company=>{const rows=check(await db.from(table).delete().eq('company_id',company).eq('id',id).select('id'));if(!rows.length)throw Error('No record deleted. Your access may have changed.');},'Deleted');
 }
-async function clearData(){if(!confirm('Permanently clear all markets, keywords and rankings for '+companyLabel()+'?'))return;await mutate(async id=>{for(const table of ['rankings','keywords','markets']){check(await db.from(table).delete().eq('company_id',id));if((await allRows(table,id)).length)throw Error('Some '+table+' could not be deleted. Check your membership.');}},'Selected company data cleared');}
 async function saveManualEntry(){
  const date=$('entryDate').value,keyword=$('entryKeyword').value,market=marketByName($('entryCountry').value),raw=$('entryPosition').value;
  const position=raw===''?null:Number(raw);
@@ -178,7 +177,32 @@ function renderEntry(){
  }
 }
 function refreshEntryKeywords(){fillSelect('entryKeyword',allKeywords($('entryCountry').value).map(x=>[x,x]),false);syncEntryKeywordSearch();}
-function renderImportInfo(){$('dataInfo').textContent=state.rows.length.toLocaleString()+' ranking observations saved in Supabase for '+companyLabel()+'. Import merges by keyword, market and date; matching observations are updated.';}
+let importListRequest=0;
+async function renderImportInfo(){
+ const request=++importListRequest,company=activeAccount,ticket=generation;
+ const target=$('dataInfo');target.textContent='Loading uploaded files…';
+ try{
+  const uploads=check(await db.from('excel_imports').select('id,filename,uploaded_at,ranking_count,keyword_count,removed_at,removed_count').eq('company_id',company).order('uploaded_at',{ascending:false}));
+  if(request!==importListRequest||ticket!==generation||company!==activeAccount||!user)return;
+  target.replaceChildren();target.classList.remove('empty');
+  const text=document.createElement('p');text.textContent=uploads.length?'Uploaded Excel files':'No tracked Excel uploads yet.';target.append(text);
+  if(uploads.length){
+   const wrap=document.createElement('div');wrap.className='tablewrap';const table=document.createElement('table');
+   table.innerHTML='<thead><tr><th>Excel file</th><th>Uploaded (GST, UTC+4)</th><th>Rankings</th><th>Status</th><th></th></tr></thead><tbody></tbody>';
+   for(const upload of uploads){const row=document.createElement('tr');
+    for(const value of [upload.filename,new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Dubai',dateStyle:'medium',timeStyle:'short'}).format(new Date(upload.uploaded_at)),upload.ranking_count.toLocaleString(),upload.removed_at?'Removed':'Uploaded']){const cell=document.createElement('td');cell.textContent=value;row.append(cell);}
+    const cell=document.createElement('td');if(canWrite()&&!upload.removed_at){const button=document.createElement('button');button.className='btn danger sm';button.textContent='Remove';button.disabled=busy;button.onclick=()=>removeExcelUpload(upload,company,ticket);cell.append(button);}row.append(cell);table.tBodies[0].append(row);
+   }wrap.append(table);target.append(wrap);
+  }
+  const hint=document.createElement('p');hint.className='hint';hint.textContent='Older imports made before file tracking was added do not have a saved filename or upload history.';target.append(hint);
+ }catch(error){if(request===importListRequest&&ticket===generation&&company===activeAccount&&user)target.textContent='Could not load uploads: '+error.message;}
+}
+async function removeExcelUpload(upload,company,ticket){
+ if(busy||!ready||company!==activeAccount||ticket!==generation||!canWrite())return;
+ if(!confirm('Remove rankings imported from '+upload.filename+'? Entries changed afterward will be kept. This cannot be undone.'))return;
+ let count=0;await mutate(async()=>{count=check(await db.rpc('remove_excel_import',{p_import:upload.id}));},'Excel import removed');
+ if(company===activeAccount&&ticket<generation)void renderImportInfo();
+}
 function renderRankings(){
  const rs=filtered({month:$('rankMonth').value,country:$('rankCountry').value,date:$('rankDate').value});
  const selectedDate=$('rankDate').value,dates=selectedDate?[selectedDate]:[...new Set(rs.map(r=>r.date))].sort(),q=$('rankSearch').value.toLowerCase(),country=$('rankCountry').value,pairs=new Map(),positions=new Map();
@@ -230,11 +254,7 @@ function excelLibrary(){return window.XLSX||globalThis.XLSX||(typeof XLSX!=='und
 async function ensureExcelLibrary(){const existing=excelLibrary();if(existing){window.XLSX=existing;return existing;}return await new Promise((resolve,reject)=>{const s=document.createElement('script');s.src='xlsx.js?v=20260930';s.async=false;s.onload=()=>{const loaded=excelLibrary();if(loaded){window.XLSX=loaded;resolve(loaded);}else reject(Error('Excel library loaded but did not initialize.'));};s.onerror=()=>reject(Error('Excel library unavailable. Check that xlsx.js is deployed with the site.'));document.head.appendChild(s);});}
 async function importFile(file){if(!file||busy||!ready)return;if(!canWrite())return notify('Editor access is required.');if(file.size>20*1024*1024)return notify('Choose a workbook smaller than 20 MB.');const id=activeAccount,ticket=generation;setBusy(true);notify('Reading workbook…');let parsed;try{const Excel=await ensureExcelLibrary();parsed=parseWorkbook(Excel.read(await file.arrayBuffer(),{type:'array',cellDates:true}));}catch(e){notify('Import failed: '+e.message);return;}finally{setBusy(false);$('fileInput').value='';}if(ticket!==generation||id!==activeAccount)return;if(!confirm(`Import ${parsed.keywords.length} keywords and ${parsed.rows.length} rankings into ${companyLabel()}? Matching rankings will be replaced. Worksheet names become markets.`)){notify('');return;}
  await mutate(async company=>{
-  const fresh=await allRows('markets',company);const missing=parsed.markets.filter(name=>!fresh.some(m=>m.name===name));await chunks('markets',missing.map(name=>({company_id:company,name})),'company_id,name');
-  const ms=await allRows('markets',company),map=new Map(ms.map(m=>[m.name,m.id]));
-  await chunks('keywords',parsed.keywords.map(k=>({company_id:company,market_id:map.get(k.market),keyword:k.keyword})),'company_id,market_id,keyword');
-  const ks=await allRows('keywords',company),km=new Map(ks.map(k=>[JSON.stringify([k.market_id,k.keyword]),k.id]));
-  await chunks('rankings',parsed.rows.map(r=>({company_id:company,market_id:map.get(r.market),keyword_id:km.get(JSON.stringify([map.get(r.market),r.keyword])),ranking_date:r.date,position:r.position,source:'import'})),'keyword_id,market_id,ranking_date');
+  check(await db.rpc('import_excel_workbook',{p_company:company,p_filename:file.name,p_rows:parsed.rows}));
  },`Imported ${parsed.rows.length} rankings and ${parsed.keywords.length} keywords`);
 }
 
@@ -438,7 +458,7 @@ function wireUI(){
  document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshDateAccess();});
  document.addEventListener('change',e=>{if(e.target.closest('.filters'))pageOffsets.clear();},true);
  document.addEventListener('input',e=>{if(e.target.id==='rankSearch')pageOffsets.clear();},true);
- const actions={logout,goToReports,generateCurrentPDF,saveManualEntry,addKeyword,addMarket,clearData};document.querySelectorAll('[data-action]').forEach(el=>el.onclick=actions[el.dataset.action]);$('accountSelect').onchange=e=>switchAccount(e.target.value);
+ const actions={logout,goToReports,generateCurrentPDF,saveManualEntry,addKeyword,addMarket};document.querySelectorAll('[data-action]').forEach(el=>el.onclick=actions[el.dataset.action]);$('accountSelect').onchange=e=>switchAccount(e.target.value);
  const titles={dashboard:'SERP Dashboard',rankings:'Daily Rankings',history:'Keyword History',reports:'Monthly Reports',entry:'Manual SERP Entry',keywords:'Keyword Management',markets:'Countries / Markets',import:'Import / Data',audit:'Audit History',staffs:'Staff info',requests:'Request to admin'};
  document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>{if(!ready)return;document.querySelectorAll('.nav button,.page').forEach(x=>x.classList.remove('active'));b.classList.add('active');$(b.dataset.page).classList.add('active');$('pageTitle').textContent=titles[b.dataset.page];$('pageDesc').textContent=pageDescription();renderActivePage();});
  for(const id of ['rankMonth','rankCountry'])$(id).onchange=()=>{if(id==='rankMonth'&&$('rankDate').value&&!$('rankDate').value.startsWith($('rankMonth').value))$('rankDate').value='';renderRankings();};
