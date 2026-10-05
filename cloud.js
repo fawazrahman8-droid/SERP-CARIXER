@@ -10,19 +10,19 @@ function companyLabel(){const c=activeCompany();return c?`${c.domain} — ${c.na
 function notify(message){$('notice').textContent=message;$('notice').hidden=!message;}
 function canWrite(){return memberships.some(m=>m.company_id===activeAccount&&['owner','editor'].includes(m.role));}
 
-function isCoAdmin(){return memberships.some(m=>m.company_id===activeAccount&&m.role==='co_admin');}
+function isEntryLimited(){return memberships.some(m=>m.company_id===activeAccount&&['co_admin','staff'].includes(m.role));}
 function dubaiToday(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Dubai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());}
 function usernameEmail(value){const username=value.trim().toLowerCase();if(!/^[a-z0-9][a-z0-9._-]{2,39}$/.test(username))throw Error('Enter your assigned username.');return username+'@users.serptrack.invalid';}
-function pageDescription(){return companyLabel()+(isCoAdmin()?' · Add new rankings for today ('+dubaiToday()+', Dubai)':'');}
+function pageDescription(){return companyLabel()+(isEntryLimited()?' · Add new rankings for today ('+dubaiToday()+', Dubai)':'');}
 let dateAccessTimer=null,loadedAccessDate='';
 function refreshDateAccess(){
- if(!user||!isCoAdmin()||!loadedAccessDate||loadedAccessDate===dubaiToday())return;
+ if(!user||!isEntryLimited()||!loadedAccessDate||loadedAccessDate===dubaiToday())return;
  ready=false;state=emptyState();clearRenderedPages();document.querySelector('.app').hidden=true;
  if(busy){dateAccessTimer=setTimeout(refreshDateAccess,1000);return;}
  void switchAccount(activeAccount);
 }
 function applyRoleUI(){
- const limited=isCoAdmin();loadedAccessDate=limited?dubaiToday():'';
+ const limited=isEntryLimited();loadedAccessDate=limited?dubaiToday():'';
  document.querySelectorAll('.nav button').forEach(el=>el.hidden=false);
  for(const id of ['rankMonth','rankDate']){$(id).parentElement.hidden=false;$(id).disabled=false;}
  $('monthChart').closest('.panel').hidden=false;$('dashMonth').closest('.panel').hidden=false;
@@ -89,7 +89,7 @@ async function loadCompany(id){
  document.querySelectorAll('.filters input').forEach(el=>el.value='');
  document.querySelector('.app').hidden=false;
  rebuildFilters();$('accountSelect').value=id;$('entryAccount').textContent=companyLabel();$('pageDesc').textContent=pageDescription();
- $('sessionLabel').textContent=`${user.app_metadata?.username||user.email?.split('@')[0]||'Signed in'} · ${isCoAdmin()?'Co-admin · Today entry only':canWrite()?'Admin':'Read only'}`;
+ $('sessionLabel').textContent=`${user.app_metadata?.username||user.email?.split('@')[0]||'Signed in'} · ${isEntryLimited()?(memberships.some(m=>m.company_id===activeAccount&&m.role==='staff')?'Staff · Oman, Qatar, Kuwait':'Co-admin')+' · Today entry only':canWrite()?'Admin':'Read only'}`;
  document.querySelectorAll('#entry button,#keywords button,#markets button,#import button,#fileInput').forEach(el=>el.disabled=!canWrite());
  applyRoleUI();ready=true;document.querySelector('.app').hidden=false;$('authScreen').hidden=true;
 }
@@ -107,7 +107,7 @@ async function openSession(session){
 }
 async function logout(){clearPrivate();user=null;$('authSignout').hidden=true;$('authScreen').hidden=false;authMessage('Signed out.');try{check(await db.auth.signOut({scope:'local'}));}catch(e){authMessage('Workspace cleared. Sign-out failed: '+e.message+' Close this tab to discard its session.');}}
 async function mutate(action,message,allowTodayInsert=false){
- if(busy)return;if(!ready||!user||!(canWrite()||(allowTodayInsert&&isCoAdmin()))){notify('An owner or editor membership is required.');return;}
+ if(busy)return;if(!ready||!user||!(canWrite()||(allowTodayInsert&&isEntryLimited()))){notify('An owner or editor membership is required.');return;}
  const id=activeAccount,ticket=generation;let saved=false;setBusy(true);notify('Saving…');
  try{await action(id);saved=true;if(ticket!==generation||id!==activeAccount||!user)return;await loadCompany(id);notify('');toast(message);}
  catch(e){if(user&&activeAccount===id){if(!saved){try{await loadCompany(id);}catch{ready=false;}}else ready=false;if(!ready){document.querySelector('.app').hidden=true;$('authScreen').hidden=false;authMessage((saved?'Your data was saved, but the page could not refresh. ':'The operation could not finish. ')+e.message+' Sign in again to reload.');}notify((saved?'Saved, but refresh failed: ':'Save did not finish: ')+e.message);}}
@@ -132,17 +132,17 @@ async function saveManualEntry(){
  if(!date||!market||!keyword)return notify('Select date, country and keyword.');
  if(position!==null&&(!Number.isInteger(position)||position<1||position>1000))return notify('Position must be a whole number from 1 to 1000, or blank for Not Ranked.');
  const k=keywordRecords.find(k=>k.keyword===keyword&&(k.market_id===market.id||k.market_id===null));if(!k)return notify('This keyword is not assigned to the selected market.');
- if(isCoAdmin()&&date!==dubaiToday())return notify('You can only add rankings for today in Dubai time.');
- if(isCoAdmin()&&state.rows.some(r=>r.keyword_id===k.id&&r.market_id===market.id&&r.date===date))return notify('Already entered for today. Only an admin can change this ranking.');
+ if(isEntryLimited()&&date!==dubaiToday())return notify('You can only add rankings for today in Dubai time.');
+ if(isEntryLimited()&&state.rows.some(r=>r.keyword_id===k.id&&r.market_id===market.id&&r.date===date))return notify('Already entered for today. Only an admin can change this ranking.');
  await mutate(async id=>{const record={company_id:id,market_id:market.id,keyword_id:k.id,ranking_date:date,position,source:'manual'};
- const query=isCoAdmin()?db.from('rankings').insert(record):db.from('rankings').upsert(record,{onConflict:'keyword_id,market_id,ranking_date'});
+ const query=isEntryLimited()?db.from('rankings').insert(record):db.from('rankings').upsert(record,{onConflict:'keyword_id,market_id,ranking_date'});
  const result=await query.select().single();if(result.error?.code==='23505')throw Error('Already entered for today. Only an admin can change this ranking.');check(result);$('entryPosition').value='';},'Ranking saved',true);
 }
-function deleteButton(table,id){const b=document.createElement('button');b.className='btn sm danger-text';b.textContent='Delete';b.disabled=!canWrite();b.hidden=isCoAdmin();b.onclick=()=>deleteRecord(table,id);return b;}
+function deleteButton(table,id){const b=document.createElement('button');b.className='btn sm danger-text';b.textContent='Delete';b.disabled=!canWrite();b.hidden=isEntryLimited();b.onclick=()=>deleteRecord(table,id);return b;}
 function renderKeywords(){const el=$('keywordList');el.replaceChildren();$('keywordCountPill').textContent=state.keywords.length+' keywords';for(const k of pageSlice('keywords',state.keywords,100,'keywordList',renderKeywords).items){const row=document.createElement('div');row.className='keyword-row';const text=document.createElement('span');text.textContent=k.name+' · '+(k.market||'Unassigned');row.append(text,deleteButton('keywords',k.id));el.append(row);}if(!el.children.length)el.textContent='No keywords yet.';}
 function renderMarkets(){const el=$('marketList');el.replaceChildren();$('marketCountPill').textContent=marketRecords.length+' markets';for(const m of marketRecords){const row=document.createElement('div');row.className='market-row';const text=document.createElement('span');text.textContent=m.name;row.append(text,deleteButton('markets',m.id));el.append(row);}if(!el.children.length)el.textContent='No markets yet.';}
 function renderEntry(){
- if(isCoAdmin())$('entryDate').value=dubaiToday();else if(!$('entryDate').value)$('entryDate').value=new Date().toLocaleDateString('en-CA');
+ if(isEntryLimited())$('entryDate').value=dubaiToday();else if(!$('entryDate').value)$('entryDate').value=new Date().toLocaleDateString('en-CA');
  const date=$('entryDate').value,keyword=$('entryKeyword').value,country=$('entryCountry').value;
  const el=$('entryBody');el.replaceChildren();
  const matches=state.rows.filter(r=>r.date===date&&r.keyword===keyword&&r.country===country);
