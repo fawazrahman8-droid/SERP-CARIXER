@@ -37,6 +37,6 @@
 [data-theme="dark"] #notice{background:#382819;color:#fed7aa;border-color:#80552c}
 [data-theme="dark"] .toast{background:#e2e8f0;color:#0f172a}
 
-#rankingAlertsRows td,#rankingAlertsPanel h3,#rankingAlertsStatus,.nav button.ranking-alert-text{color:var(--red)}
+#rankingAlertsRows td,#rankingAlertsPanel h3,#rankingAlertsStatus,.nav .ranking-alert-text{color:var(--red)}
 .toast.ranking-warning-toast{color:var(--red);background:var(--card);border:1px solid var(--red);font-weight:600}
 
