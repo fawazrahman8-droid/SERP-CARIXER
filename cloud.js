@@ -35,7 +35,8 @@ function applyRoleUI(){
  document.querySelectorAll('.nav button').forEach(el=>el.hidden=false);
  document.querySelector('[data-page="audit"]').hidden=!canAudit();
  document.querySelector('[data-page="staffs"]').hidden=!canManageStaff();
- const requestsButton=document.querySelector('[data-page="requests"]');requestsButton.hidden=!canSeeWorkRequests();requestsButton.textContent=canManageStaff()?'Work requests':'Request to admin';
+ const requestsButton=document.querySelector('[data-page="requests"]');requestsButton.hidden=!canSeeWorkRequests()||canManageStaff();requestsButton.textContent='Request to admin';
+ const requestsContent=$('workRequestsContent');if(requestsContent)(canManageStaff()?$('staffs'):$('requests')).append(requestsContent);
  if(!canManageStaff())clearStaffUI();
  for(const id of ['rankMonth','rankDate']){$(id).parentElement.hidden=false;$(id).disabled=false;}
  $('monthChart').closest('.panel').hidden=false;$('dashMonth').closest('.panel').hidden=false;
@@ -70,7 +71,7 @@ function clearRenderedPages(){
  document.querySelectorAll('.pagination:not(.audit-pagination):not(.work-request-pagination)').forEach(el=>el.remove());
 }
 function renderActivePage(){
- const renderers={dashboard:updateDashboard,rankings:renderRankings,history:renderHistory,reports:renderReport,entry:renderEntry,keywords:renderKeywords,markets:renderMarkets,import:renderImportInfo,audit:renderAudit,staffs:renderStaffs,requests:renderWorkRequests};
+ const renderers={dashboard:updateDashboard,rankings:renderRankings,history:renderHistory,reports:renderReport,entry:renderEntry,keywords:renderKeywords,markets:renderMarkets,import:renderImportInfo,audit:renderAudit,staffs:renderStaffInfo,requests:renderWorkRequests};
  (renderers[document.querySelector('.page.active')?.id]||updateDashboard)();
 }
 function pageSlice(key,items,size,targetId,render){
@@ -107,6 +108,7 @@ async function loadCompany(id){
  document.querySelectorAll('#entry button,#keywords button,#markets button,#import button,#fileInput').forEach(el=>el.disabled=!canWrite());
  applyRoleUI();ready=true;document.querySelector('.app').hidden=false;$('authScreen').hidden=true;
  if(canAudit()){ $('sessionLabel').textContent=(user.app_metadata?.username||'Signed in')+' · Auditor · Read only';document.querySelector('[data-page="audit"]').click(); }
+ else if(document.querySelector('.page.active')?.id==='requests'&&canManageStaff())document.querySelector('[data-page="staffs"]').click();
  else if(document.querySelector('.page.active')?.id==='audit'||(document.querySelector('.page.active')?.id==='staffs'&&!canManageStaff())||(document.querySelector('.page.active')?.id==='requests'&&!canSeeWorkRequests()))document.querySelector('[data-page="dashboard"]').click();
  else if(['staffs','requests'].includes(document.querySelector('.page.active')?.id))renderActivePage();
 }
@@ -299,6 +301,7 @@ function setupWorkRequestsUI(){
  const page=document.createElement('section');page.id='requests';page.className='page';
  page.innerHTML='<div class="panel" id="workRequestSubmitPanel"><h3>Request temporary work cover</h3><p>Your currently assigned markets will be included. Choose your leave dates and explain why you need someone to cover your work.</p><form id="workRequestForm"><div class="filters"><div><label for="workRequestStart">First day</label><input type="date" id="workRequestStart" required></div><div><label for="workRequestEnd">Last day</label><input type="date" id="workRequestEnd" required></div></div><label for="workRequestReason">Reason</label><textarea id="workRequestReason" rows="3" maxlength="2000" required placeholder="For example: I am going on leave for 10 days." style="display:block;width:100%;box-sizing:border-box;margin:8px 0 14px"></textarea><button type="submit" class="btn primary" id="workRequestSend">Send for approval</button></form></div><div class="panel"><div class="sectiontitle"><h3 id="workRequestHistoryTitle">Request history</h3><button type="button" class="btn" id="workRequestRefresh">Refresh</button></div><p id="workRequestStatus" role="status"></p><div class="tablewrap"><table><thead><tr><th>Staff member</th><th>Dates (GST)</th><th>Reason / work</th><th>Status</th><th>Covering person</th><th>Review</th></tr></thead><tbody id="workRequestRows"></tbody></table></div><div class="pagination work-request-pagination"><button type="button" class="btn" id="workRequestPrevious">Previous</button><span id="workRequestPageLabel"></span><button type="button" class="btn" id="workRequestNext">Next</button></div></div>';
  document.querySelector('main').append(page);
+ const content=document.createElement('div');content.id='workRequestsContent';while(page.firstChild)content.append(page.firstChild);page.append(content);
  $('workRequestRefresh').onclick=()=>{workRequestPage=0;void switchAccount(activeAccount);};
  $('workRequestPrevious').onclick=()=>{workRequestPage=Math.max(0,workRequestPage-1);void renderWorkRequests();};$('workRequestNext').onclick=()=>{workRequestPage++;void renderWorkRequests();};
  $('workRequestForm').onsubmit=async event=>{
@@ -320,7 +323,7 @@ async function decideWorkRequest(id,decision,coverId=null,note=''){
 async function renderWorkRequests(){
  const request=++workRequestLoad,ticket=generation,uid=user?.id;$('workRequestRows').replaceChildren();
  if(!ready||!user||!canSeeWorkRequests())return;
- const admin=canManageStaff();$('pageTitle').textContent=admin?'Work requests':'Request to admin';$('workRequestSubmitPanel').hidden=admin||!canRequestWork();$('workRequestHistoryTitle').textContent=admin?'Staff requests':'Request history and assigned cover';
+ const admin=canManageStaff();$('pageTitle').textContent=admin?'Staff info':'Request to admin';$('workRequestSubmitPanel').hidden=admin||!canRequestWork();$('workRequestHistoryTitle').textContent=admin?'Work requests':'Request history and assigned cover';
  $('workRequestStart').min=$('workRequestEnd').min=dubaiToday();$('workRequestStatus').textContent='Loading requests…';$('workRequestPrevious').disabled=$('workRequestNext').disabled=true;
  try{
   const rows=check(await db.from('work_requests').select('*').order('requested_at',{ascending:false}).order('id',{ascending:false}).range(workRequestPage*50,workRequestPage*50+50));let accounts=[];
@@ -357,7 +360,7 @@ async function functionMessage(error,fallback){
  try{const body=await error.context?.json();return body?.error||error.message||fallback;}catch{return error.message||fallback;}
 }
 function setupStaffUI(){
- const button=document.createElement('button');button.type='button';button.dataset.page='staffs';button.hidden=true;button.textContent='Staffs';document.querySelector('.nav').append(button);
+ const button=document.createElement('button');button.type='button';button.dataset.page='staffs';button.hidden=true;button.textContent='Staff info';document.querySelector('.nav').append(button);
  const page=document.createElement('section');page.id='staffs';page.className='page';page.innerHTML='<div class="panel"><div class="sectiontitle"><h3>Login accounts</h3><button type="button" class="btn" id="staffRefresh">Refresh</button></div><p id="staffStatus" role="status"></p><div class="tablewrap"><table><thead><tr><th>Username</th><th>Role / companies</th><th>Last sign-in (GST)</th><th>Action</th></tr></thead><tbody id="staffRows"></tbody></table></div></div>';
  document.querySelector('main').append(page);
  const dialog=document.createElement('dialog');dialog.id='staffPasswordDialog';dialog.className='panel';dialog.style.cssText='width:min(480px,94vw);color:var(--text);background:var(--card);border:1px solid var(--line);border-radius:14px';
@@ -375,6 +378,7 @@ function setupStaffUI(){
   finally{staffResetBusy=false;$('staffPasswordSave').disabled=false;}
  };
 }
+async function renderStaffInfo(){await Promise.all([renderStaffs(),renderWorkRequests()]);}
 async function renderStaffs(){
  const request=++staffRequest,ticket=generation,uid=user?.id;$('staffRows').replaceChildren();
  if(!ready||!user||!canManageStaff())return;
@@ -435,7 +439,7 @@ function wireUI(){
  document.addEventListener('change',e=>{if(e.target.closest('.filters'))pageOffsets.clear();},true);
  document.addEventListener('input',e=>{if(e.target.id==='rankSearch')pageOffsets.clear();},true);
  const actions={logout,goToReports,generateCurrentPDF,saveManualEntry,addKeyword,addMarket,clearData};document.querySelectorAll('[data-action]').forEach(el=>el.onclick=actions[el.dataset.action]);$('accountSelect').onchange=e=>switchAccount(e.target.value);
- const titles={dashboard:'SERP Dashboard',rankings:'Daily Rankings',history:'Keyword History',reports:'Monthly Reports',entry:'Manual SERP Entry',keywords:'Keyword Management',markets:'Countries / Markets',import:'Import / Data',audit:'Audit History',staffs:'Staffs',requests:'Work requests'};
+ const titles={dashboard:'SERP Dashboard',rankings:'Daily Rankings',history:'Keyword History',reports:'Monthly Reports',entry:'Manual SERP Entry',keywords:'Keyword Management',markets:'Countries / Markets',import:'Import / Data',audit:'Audit History',staffs:'Staff info',requests:'Request to admin'};
  document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>{if(!ready)return;document.querySelectorAll('.nav button,.page').forEach(x=>x.classList.remove('active'));b.classList.add('active');$(b.dataset.page).classList.add('active');$('pageTitle').textContent=titles[b.dataset.page];$('pageDesc').textContent=pageDescription();renderActivePage();});
  for(const id of ['rankMonth','rankCountry'])$(id).onchange=()=>{if(id==='rankMonth'&&$('rankDate').value&&!$('rankDate').value.startsWith($('rankMonth').value))$('rankDate').value='';renderRankings();};
  $('rankDate').onchange=()=>{const date=$('rankDate').value;if(date){const month=date.slice(0,7),select=$('rankMonth');if(![...select.options].some(o=>o.value===month)){const option=document.createElement('option');option.value=option.textContent=month;select.append(option);}select.value=month;}renderRankings();};$('rankSearch').oninput=renderRankings;
