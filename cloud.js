@@ -23,6 +23,9 @@ function refreshDateAccess(){
 }
 function applyRoleUI(){
  const limited=isEntryLimited();loadedAccessDate=limited?dubaiToday():'';
+ const denied=memberships.find(m=>m.company_id===activeAccount)?.denied_entry_market_names||[];
+ for(const option of [...$('entryCountry').options])if(denied.includes(option.value.trim().toLowerCase()))option.remove();
+ refreshEntryKeywords();
  document.querySelectorAll('.nav button').forEach(el=>el.hidden=false);
  for(const id of ['rankMonth','rankDate']){$(id).parentElement.hidden=false;$(id).disabled=false;}
  $('monthChart').closest('.panel').hidden=false;$('dashMonth').closest('.panel').hidden=false;
@@ -97,7 +100,7 @@ async function switchAccount(id){if(busy||!user)return;setBusy(true);notify('');
 async function openSession(session){
  if(!session){user=null;companies=[];memberships=[];clearPrivate();$('authScreen').hidden=false;$('authSignout').hidden=true;return;}
  const ticket=++generation;user=session.user;setBusy(true);notify('');setWorkspaceLoading(true);
- try{const [cs,ms]=await Promise.all([allRows('companies'),db.from('company_members').select('company_id,role').eq('user_id',user.id).then(check)]);
+ try{const [cs,ms]=await Promise.all([allRows('companies'),db.from('company_members').select('company_id,role,denied_entry_market_names').eq('user_id',user.id).then(check)]);
   if(ticket!==generation)return;companies=cs;memberships=ms;$('authSignout').hidden=false;
   if(!cs.length){clearPrivate();$('authScreen').hidden=false;authMessage('Signed in, but no company membership has been assigned. Ask your administrator to assign company access.');return;}
   $('accountSelect').innerHTML=cs.map(c=>`<option value="${esc(c.id)}">${esc(c.domain+' — '+c.name)}</option>`).join('');
@@ -130,6 +133,7 @@ async function saveManualEntry(){
  const date=$('entryDate').value,keyword=$('entryKeyword').value,market=marketByName($('entryCountry').value),raw=$('entryPosition').value;
  const position=raw===''?null:Number(raw);
  if(!date||!market||!keyword)return notify('Select date, country and keyword.');
+ if((memberships.find(m=>m.company_id===activeAccount)?.denied_entry_market_names||[]).includes(market.name.trim().toLowerCase()))return notify('Ranking entry for this market is assigned to another user.');
  if(position!==null&&(!Number.isInteger(position)||position<1||position>1000))return notify('Position must be a whole number from 1 to 1000, or blank for Not Ranked.');
  const k=keywordRecords.find(k=>k.keyword===keyword&&(k.market_id===market.id||k.market_id===null));if(!k)return notify('This keyword is not assigned to the selected market.');
  if(isEntryLimited()&&date!==dubaiToday())return notify('You can only add rankings for today in Dubai time.');
