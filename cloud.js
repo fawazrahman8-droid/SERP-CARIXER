@@ -9,10 +9,11 @@ function activeCompany(){return companies.find(c=>c.id===activeAccount);}
 function companyLabel(){const c=activeCompany();return c?`${c.domain} — ${c.name}`:'';}
 function notify(message){$('notice').textContent=message;$('notice').hidden=!message;}
 function canWrite(){return memberships.some(m=>m.company_id===activeAccount&&['owner','editor'].includes(m.role));}
+function canAudit(){return memberships.some(m=>m.role==='auditor');}
 
 function isEntryLimited(){return memberships.some(m=>m.company_id===activeAccount&&['co_admin','staff'].includes(m.role));}
 function dubaiToday(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Dubai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());}
-function usernameEmail(value){const username=value.trim().toLowerCase();if(!/^[a-z0-9][a-z0-9._-]{2,39}$/.test(username))throw Error('Enter your assigned username.');return username+'@users.serptrack.invalid';}
+function usernameEmail(value){const username=value.trim().toLowerCase();if(username==='fawaz@db')return 'fawaz+db@users.serptrack.invalid';if(!/^[a-z0-9][a-z0-9._-]{2,39}$/.test(username))throw Error('Enter your assigned username.');return username+'@users.serptrack.invalid';}
 function pageDescription(){return companyLabel()+(isEntryLimited()?' · Add new rankings for today ('+dubaiToday()+', Dubai)':'');}
 let dateAccessTimer=null,loadedAccessDate='';
 function refreshDateAccess(){
@@ -27,6 +28,7 @@ function applyRoleUI(){
  for(const option of [...$('entryCountry').options])if(denied.includes(option.value.trim().toLowerCase()))option.remove();
  refreshEntryKeywords();
  document.querySelectorAll('.nav button').forEach(el=>el.hidden=false);
+ document.querySelector('[data-page="audit"]').hidden=!canAudit();
  for(const id of ['rankMonth','rankDate']){$(id).parentElement.hidden=false;$(id).disabled=false;}
  $('monthChart').closest('.panel').hidden=false;$('dashMonth').closest('.panel').hidden=false;
  $('entryDate').disabled=limited;
@@ -57,10 +59,10 @@ function clearRenderedPages(){
  for(const chart of [monthChart,historyChart,reportChart,rankDonut])chart?.destroy();
  monthChart=historyChart=reportChart=rankDonut=null;
  document.querySelectorAll('tbody,thead#rankHead,.keyword-list,#latestSnapshot,#donutLegend,#dashReportStats,#reportStats,#dataInfo').forEach(el=>el.replaceChildren());
- document.querySelectorAll('.pagination').forEach(el=>el.remove());
+ document.querySelectorAll('.pagination:not(.audit-pagination)').forEach(el=>el.remove());
 }
 function renderActivePage(){
- const renderers={dashboard:updateDashboard,rankings:renderRankings,history:renderHistory,reports:renderReport,entry:renderEntry,keywords:renderKeywords,markets:renderMarkets,import:renderImportInfo};
+ const renderers={dashboard:updateDashboard,rankings:renderRankings,history:renderHistory,reports:renderReport,entry:renderEntry,keywords:renderKeywords,markets:renderMarkets,import:renderImportInfo,audit:renderAudit};
  (renderers[document.querySelector('.page.active')?.id]||updateDashboard)();
 }
 function pageSlice(key,items,size,targetId,render){
@@ -95,6 +97,8 @@ async function loadCompany(id){
  $('sessionLabel').textContent=`${user.app_metadata?.username||user.email?.split('@')[0]||'Signed in'} · ${isEntryLimited()?(memberships.some(m=>m.company_id===activeAccount&&m.role==='staff')?'Staff · Oman, Qatar, Kuwait':'Co-admin')+' · Today entry only':canWrite()?'Admin':'Read only'}`;
  document.querySelectorAll('#entry button,#keywords button,#markets button,#import button,#fileInput').forEach(el=>el.disabled=!canWrite());
  applyRoleUI();ready=true;document.querySelector('.app').hidden=false;$('authScreen').hidden=true;
+ if(canAudit()){ $('sessionLabel').textContent=(user.app_metadata?.username||'Signed in')+' · Auditor · Read only';document.querySelector('[data-page="audit"]').click(); }
+ else if(document.querySelector('.page.active')?.id==='audit')document.querySelector('[data-page="dashboard"]').click();
 }
 async function switchAccount(id){if(busy||!user)return;setBusy(true);notify('');setWorkspaceLoading(true);try{await loadCompany(id);notify('');}catch(e){ready=false;state=emptyState();document.querySelector('.app').hidden=true;$('authScreen').hidden=false;authMessage('Unable to load company: '+e.message+'. Sign in again to retry.');}finally{setWorkspaceLoading(false);setBusy(false);}}
 async function openSession(session){
@@ -276,14 +280,48 @@ function setupManualSearch(){
  };
  save.insertAdjacentElement('beforebegin',button);
 }
+let auditPage=0,auditRequest=0;
+function setupAuditUI(){
+ const button=document.createElement('button');button.type='button';button.dataset.page='audit';button.hidden=true;button.textContent='Audit History';document.querySelector('.nav').append(button);
+ const page=document.createElement('section');page.id='audit';page.className='page';
+ page.innerHTML='<div class="panel"><p>Changes recorded from 5 October 2026. Times shown in Gulf Standard Time (UTC+4).</p><div class="filters"><div><label for="auditCompany">Company</label><select id="auditCompany"><option value="">All companies</option></select></div><div><label for="auditAction">Action</label><select id="auditAction"><option value="">All actions</option><option value="INSERT">Created</option><option value="UPDATE">Modified</option><option value="DELETE">Deleted</option><option value="PASSWORD_CHANGED">Password changed</option><option value="PASSWORD_RESET">Password reset</option><option value="SIGNED_IN">Signed in</option></select></div><div><label for="auditUser">Username</label><input id="auditUser" placeholder="Filter by username"></div></div><button type="button" class="btn" id="auditRefresh">Refresh</button><p id="auditStatus" role="status"></p><div class="tablewrap"><table><thead><tr><th>Time (GST)</th><th>Who</th><th>Action</th><th>Company</th><th>Data</th><th>Details</th></tr></thead><tbody id="auditRows"></tbody></table></div><div class="pagination audit-pagination"><button type="button" class="btn" id="auditPrevious">Previous</button><span id="auditPageLabel"></span><button type="button" class="btn" id="auditNext">Next</button></div></div>';
+ document.querySelector('main').append(page);
+ for(const id of ['auditCompany','auditAction','auditUser'])$(id).onchange=()=>{auditPage=0;void renderAudit();};
+ $('auditRefresh').onclick=()=>{auditPage=0;void renderAudit();};$('auditPrevious').onclick=()=>{auditPage=Math.max(0,auditPage-1);void renderAudit();};$('auditNext').onclick=()=>{auditPage++;void renderAudit();};
+}
+function auditValues(values){
+ if(!values)return '—';
+ return Object.entries(values).filter(([key])=>!['id','company_id','market_id','keyword_id','user_id','created_at','updated_at'].includes(key)).map(([key,value])=>key.replaceAll('_',' ')+': '+(key==='position'&&value===null?'Not Ranked':typeof value==='object'&&value!==null?JSON.stringify(value):String(value??'—'))).join('\n')||'—';
+}
+async function renderAudit(){
+ const request=++auditRequest,ticket=generation,uid=user?.id;
+ $('auditRows').replaceChildren();if(!ready||!user||!canAudit())return;
+ fillSelect('auditCompany',[['','All companies'],...companies.map(c=>[c.id,c.domain])],false);
+ $('auditStatus').textContent='Loading audit history…';$('auditPrevious').disabled=$('auditNext').disabled=true;
+ let query=db.from('audit_events').select('*').order('occurred_at',{ascending:false}).order('id',{ascending:false}).range(auditPage*50,auditPage*50+50);
+ if($('auditCompany').value)query=query.eq('company_id',$('auditCompany').value);
+ if($('auditAction').value)query=query.eq('action',$('auditAction').value);
+ if($('auditUser').value.trim())query=query.ilike('actor_name','%'+$('auditUser').value.trim()+'%');
+ try{
+  const rows=check(await query);if(request!==auditRequest||ticket!==generation||uid!==user?.id||!canAudit())return;
+  const actions={INSERT:'Created',UPDATE:'Modified',DELETE:'Deleted',PASSWORD_CHANGED:'Password changed',PASSWORD_RESET:'Password reset',SIGNED_IN:'Signed in'};
+  for(const item of rows.slice(0,50)){
+   const tr=document.createElement('tr');
+   for(const value of [new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Dubai',dateStyle:'medium',timeStyle:'medium'}).format(new Date(item.occurred_at)),item.actor_name,actions[item.action]||item.action,item.company_name||'User accounts',item.entity_type.replaceAll('_',' ')+' · '+item.description]){const td=tr.insertCell();td.textContent=value;}
+   const td=tr.insertCell(),details=document.createElement('details'),summary=document.createElement('summary'),before=document.createElement('pre'),after=document.createElement('pre');summary.textContent='View changes';before.textContent='Before\n'+auditValues(item.before_values);after.textContent='After\n'+auditValues(item.after_values);for(const pre of [before,after])pre.style.cssText='white-space:pre-wrap;max-width:420px;overflow-wrap:anywhere';details.append(summary,before,after);td.append(details);$('auditRows').append(tr);
+  }
+  $('auditStatus').textContent=rows.length?'':'No matching audit events.';$('auditPageLabel').textContent='Page '+(auditPage+1);$('auditPrevious').disabled=auditPage===0;$('auditNext').disabled=rows.length<=50;
+ }catch(error){if(request===auditRequest&&ticket===generation&&uid===user?.id)$('auditStatus').textContent='Unable to load audit history: '+error.message;}
+}
 function wireUI(){
+ setupAuditUI();
  setupEntryKeywordSearch();
  setupManualSearch();
  document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshDateAccess();});
  document.addEventListener('change',e=>{if(e.target.closest('.filters'))pageOffsets.clear();},true);
  document.addEventListener('input',e=>{if(e.target.id==='rankSearch')pageOffsets.clear();},true);
  const actions={logout,goToReports,generateCurrentPDF,saveManualEntry,addKeyword,addMarket,clearData};document.querySelectorAll('[data-action]').forEach(el=>el.onclick=actions[el.dataset.action]);$('accountSelect').onchange=e=>switchAccount(e.target.value);
- const titles={dashboard:'SERP Dashboard',rankings:'Daily Rankings',history:'Keyword History',reports:'Monthly Reports',entry:'Manual SERP Entry',keywords:'Keyword Management',markets:'Countries / Markets',import:'Import / Data'};
+ const titles={dashboard:'SERP Dashboard',rankings:'Daily Rankings',history:'Keyword History',reports:'Monthly Reports',entry:'Manual SERP Entry',keywords:'Keyword Management',markets:'Countries / Markets',import:'Import / Data',audit:'Audit History'};
  document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>{if(!ready)return;document.querySelectorAll('.nav button,.page').forEach(x=>x.classList.remove('active'));b.classList.add('active');$(b.dataset.page).classList.add('active');$('pageTitle').textContent=titles[b.dataset.page];$('pageDesc').textContent=pageDescription();renderActivePage();});
  for(const id of ['rankMonth','rankCountry'])$(id).onchange=()=>{if(id==='rankMonth'&&$('rankDate').value&&!$('rankDate').value.startsWith($('rankMonth').value))$('rankDate').value='';renderRankings();};
  $('rankDate').onchange=()=>{const date=$('rankDate').value;if(date){const month=date.slice(0,7),select=$('rankMonth');if(![...select.options].some(o=>o.value===month)){const option=document.createElement('option');option.value=option.textContent=month;select.append(option);}select.value=month;}renderRankings();};$('rankSearch').oninput=renderRankings;
