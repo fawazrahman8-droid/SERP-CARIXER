@@ -1,6 +1,7 @@
 'use strict';
 let db, user=null, companies=[], memberships=[], marketRecords=[], keywordRecords=[];
 let generation=0, busy=false, ready=false, recovery=false;
+let temporaryMarketNames=[];
 const pageOffsets=new Map();
 const $=id=>document.getElementById(id);
 const emptyState=()=>({rows:[],sheets:[],keywords:[],markets:[]});
@@ -12,8 +13,10 @@ function canWrite(){return memberships.some(m=>m.company_id===activeAccount&&['o
 function canAudit(){return memberships.some(m=>m.role==='auditor');}
 function canManageStaff(){return !canAudit()&&memberships.some(m=>['owner','editor'].includes(m.role));}
 
-function isEntryLimited(){return memberships.some(m=>m.company_id===activeAccount&&['co_admin','staff','head_staff'].includes(m.role));}
-function entryRoleLabel(){const role=memberships.find(m=>m.company_id===activeAccount)?.role;return role==='staff'?'Staff · Oman, Qatar, Kuwait':role==='head_staff'?'Head of staff':'Co-admin';}
+function isEntryLimited(){return !canWrite()&&(temporaryMarketNames.length>0||memberships.some(m=>m.company_id===activeAccount&&['co_admin','staff','head_staff'].includes(m.role)));}
+function canRequestWork(){return !canAudit()&&memberships.some(m=>['co_admin','staff','head_staff'].includes(m.role));}
+function canSeeWorkRequests(){return !canAudit()&&memberships.length>0;}
+function entryRoleLabel(){const role=memberships.find(m=>m.company_id===activeAccount)?.role;return role==='staff'?'Staff':role==='head_staff'?'Head of staff':role==='co_admin'?'Co-admin':'Temporary cover';}
 function dubaiToday(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Dubai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());}
 function usernameEmail(value){const username=value.trim().toLowerCase();if(username==='fawaz@db')return 'fawaz+db@users.serptrack.invalid';if(!/^[a-z0-9][a-z0-9._-]{2,39}$/.test(username))throw Error('Enter your assigned username.');return username+'@users.serptrack.invalid';}
 function pageDescription(){return companyLabel()+(isEntryLimited()?' · Add new rankings for today ('+dubaiToday()+', Dubai)':'');}
@@ -27,11 +30,12 @@ function refreshDateAccess(){
 function applyRoleUI(){
  const limited=isEntryLimited();loadedAccessDate=limited?dubaiToday():'';
  const denied=memberships.find(m=>m.company_id===activeAccount)?.denied_entry_market_names||[];
- for(const option of [...$('entryCountry').options])if(denied.includes(option.value.trim().toLowerCase()))option.remove();
+ for(const option of [...$('entryCountry').options])if(denied.includes(option.value.trim().toLowerCase())&&!temporaryMarketNames.includes(option.value.trim().toLowerCase()))option.remove();
  refreshEntryKeywords();
  document.querySelectorAll('.nav button').forEach(el=>el.hidden=false);
  document.querySelector('[data-page="audit"]').hidden=!canAudit();
  document.querySelector('[data-page="staffs"]').hidden=!canManageStaff();
+ const requestsButton=document.querySelector('[data-page="requests"]');requestsButton.hidden=!canSeeWorkRequests();requestsButton.textContent=canManageStaff()?'Work requests':'Request to admin';
  if(!canManageStaff())clearStaffUI();
  for(const id of ['rankMonth','rankDate']){$(id).parentElement.hidden=false;$(id).disabled=false;}
  $('monthChart').closest('.panel').hidden=false;$('dashMonth').closest('.panel').hidden=false;
@@ -63,10 +67,10 @@ function clearRenderedPages(){
  for(const chart of [monthChart,historyChart,reportChart,rankDonut])chart?.destroy();
  monthChart=historyChart=reportChart=rankDonut=null;
  document.querySelectorAll('tbody,thead#rankHead,.keyword-list,#latestSnapshot,#donutLegend,#dashReportStats,#reportStats,#dataInfo').forEach(el=>el.replaceChildren());
- document.querySelectorAll('.pagination:not(.audit-pagination)').forEach(el=>el.remove());
+ document.querySelectorAll('.pagination:not(.audit-pagination):not(.work-request-pagination)').forEach(el=>el.remove());
 }
 function renderActivePage(){
- const renderers={dashboard:updateDashboard,rankings:renderRankings,history:renderHistory,reports:renderReport,entry:renderEntry,keywords:renderKeywords,markets:renderMarkets,import:renderImportInfo,audit:renderAudit,staffs:renderStaffs};
+ const renderers={dashboard:updateDashboard,rankings:renderRankings,history:renderHistory,reports:renderReport,entry:renderEntry,keywords:renderKeywords,markets:renderMarkets,import:renderImportInfo,audit:renderAudit,staffs:renderStaffs,requests:renderWorkRequests};
  (renderers[document.querySelector('.page.active')?.id]||updateDashboard)();
 }
 function pageSlice(key,items,size,targetId,render){
@@ -81,15 +85,16 @@ function pageSlice(key,items,size,targetId,render){
  return {items:items.slice(offset,offset+size),offset};
 }
 function dailyAverages(rows,days){const totals=new Map();for(const r of rows){const v=totals.get(r.date)||[0,0];if(r.position!==null){v[0]+=r.position;v[1]++;}totals.set(r.date,v);}return days.map(d=>{const v=totals.get(d);return v&&v[1]?v[0]/v[1]:null;});}
-function clearPrivate(){clearStaffUI();clearTimeout(dateAccessTimer);loadedAccessDate='';setWorkspaceLoading(false);generation++;ready=false;activeAccount=null;state=emptyState();marketRecords=[];keywordRecords=[];document.querySelector('.app').hidden=true;for(const chart of [monthChart,historyChart,reportChart,rankDonut])chart?.destroy();monthChart=historyChart=reportChart=rankDonut=null;document.querySelectorAll('tbody,.keyword-list,#latestSnapshot,#donutLegend,#dashReportStats,#reportStats,#dataInfo').forEach(el=>el.replaceChildren());$('accountSelect').replaceChildren();}
+function clearPrivate(){clearWorkRequestsUI();temporaryMarketNames=[];clearStaffUI();clearTimeout(dateAccessTimer);loadedAccessDate='';setWorkspaceLoading(false);generation++;ready=false;activeAccount=null;state=emptyState();marketRecords=[];keywordRecords=[];document.querySelector('.app').hidden=true;for(const chart of [monthChart,historyChart,reportChart,rankDonut])chart?.destroy();monthChart=historyChart=reportChart=rankDonut=null;document.querySelectorAll('tbody,.keyword-list,#latestSnapshot,#donutLegend,#dashReportStats,#reportStats,#dataInfo').forEach(el=>el.replaceChildren());$('accountSelect').replaceChildren();}
 async function allRows(table,companyId){let rows=[];for(let from=0;;from+=1000){let q=db.from(table).select('*').order('id').range(from,from+999);if(companyId)q=q.eq('company_id',companyId);const page=check(await q);rows.push(...page);if(page.length<1000)return rows;}}
 async function loadCompany(id){
  if(!companies.some(c=>c.id===id))throw Error('Company access is not available.');
  const ticket=++generation; ready=false;activeAccount=id;state=emptyState();marketRecords=[];keywordRecords=[];
  document.querySelector('.app').hidden=true;
  clearRenderedPages();
- const [ms,ks,rs]=await Promise.all(['markets','keywords','rankings'].map(t=>allRows(t,id)));
+ const [ms,ks,rs,coverage]=await Promise.all([...['markets','keywords','rankings'].map(t=>allRows(t,id)),db.from('temporary_work_grants').select('market_names').eq('cover_user_id',user.id).eq('company_id',id).lte('start_date',dubaiToday()).gte('end_date',dubaiToday()).then(check)]);
  if(ticket!==generation||!user)return;
+ temporaryMarketNames=[...new Set(coverage.flatMap(g=>g.market_names))];
  marketRecords=ms;keywordRecords=ks;const markets=new Map(ms.map(m=>[m.id,m.name])),keywords=new Map(ks.map(k=>[k.id,k.keyword]));
  if([...ms,...ks,...rs].some(r=>r.company_id!==id))throw Error('Unexpected company data. Please reload.');
  const visibleRankings=rs;
@@ -102,7 +107,8 @@ async function loadCompany(id){
  document.querySelectorAll('#entry button,#keywords button,#markets button,#import button,#fileInput').forEach(el=>el.disabled=!canWrite());
  applyRoleUI();ready=true;document.querySelector('.app').hidden=false;$('authScreen').hidden=true;
  if(canAudit()){ $('sessionLabel').textContent=(user.app_metadata?.username||'Signed in')+' · Auditor · Read only';document.querySelector('[data-page="audit"]').click(); }
- else if(document.querySelector('.page.active')?.id==='audit'||(document.querySelector('.page.active')?.id==='staffs'&&!canManageStaff()))document.querySelector('[data-page="dashboard"]').click();
+ else if(document.querySelector('.page.active')?.id==='audit'||(document.querySelector('.page.active')?.id==='staffs'&&!canManageStaff())||(document.querySelector('.page.active')?.id==='requests'&&!canSeeWorkRequests()))document.querySelector('[data-page="dashboard"]').click();
+ else if(['staffs','requests'].includes(document.querySelector('.page.active')?.id))renderActivePage();
 }
 async function switchAccount(id){if(busy||!user)return;setBusy(true);notify('');setWorkspaceLoading(true);try{await loadCompany(id);notify('');}catch(e){ready=false;state=emptyState();document.querySelector('.app').hidden=true;$('authScreen').hidden=false;authMessage('Unable to load company: '+e.message+'. Sign in again to retry.');}finally{setWorkspaceLoading(false);setBusy(false);}}
 async function openSession(session){
@@ -141,7 +147,7 @@ async function saveManualEntry(){
  const date=$('entryDate').value,keyword=$('entryKeyword').value,market=marketByName($('entryCountry').value),raw=$('entryPosition').value;
  const position=raw===''?null:Number(raw);
  if(!date||!market||!keyword)return notify('Select date, country and keyword.');
- if((memberships.find(m=>m.company_id===activeAccount)?.denied_entry_market_names||[]).includes(market.name.trim().toLowerCase()))return notify('Ranking entry for this market is assigned to another user.');
+ if((memberships.find(m=>m.company_id===activeAccount)?.denied_entry_market_names||[]).includes(market.name.trim().toLowerCase())&&!temporaryMarketNames.includes(market.name.trim().toLowerCase()))return notify('Ranking entry for this market is assigned to another user.');
  if(position!==null&&(!Number.isInteger(position)||position<1||position>1000))return notify('Position must be a whole number from 1 to 1000, or blank for Not Ranked.');
  const k=keywordRecords.find(k=>k.keyword===keyword&&(k.market_id===market.id||k.market_id===null));if(!k)return notify('This keyword is not assigned to the selected market.');
  if(isEntryLimited()&&date!==dubaiToday())return notify('You can only add rankings for today in Dubai time.');
@@ -284,6 +290,61 @@ function setupManualSearch(){
  };
  save.insertAdjacentElement('beforebegin',button);
 }
+let workRequestPage=0,workRequestLoad=0,workRequestBusy=false;
+function clearWorkRequestsUI(){
+ workRequestLoad++;workRequestPage=0;$('workRequestRows')?.replaceChildren();$('workRequestForm')?.reset();if($('workRequestStatus'))$('workRequestStatus').textContent='';
+}
+function setupWorkRequestsUI(){
+ const button=document.createElement('button');button.type='button';button.dataset.page='requests';button.hidden=true;button.textContent='Request to admin';document.querySelector('.nav').append(button);
+ const page=document.createElement('section');page.id='requests';page.className='page';
+ page.innerHTML='<div class="panel" id="workRequestSubmitPanel"><h3>Request temporary work cover</h3><p>Your currently assigned markets will be included. Choose your leave dates and explain why you need someone to cover your work.</p><form id="workRequestForm"><div class="filters"><div><label for="workRequestStart">First day</label><input type="date" id="workRequestStart" required></div><div><label for="workRequestEnd">Last day</label><input type="date" id="workRequestEnd" required></div></div><label for="workRequestReason">Reason</label><textarea id="workRequestReason" rows="3" maxlength="2000" required placeholder="For example: I am going on leave for 10 days." style="display:block;width:100%;box-sizing:border-box;margin:8px 0 14px"></textarea><button type="submit" class="btn primary" id="workRequestSend">Send for approval</button></form></div><div class="panel"><div class="sectiontitle"><h3 id="workRequestHistoryTitle">Request history</h3><button type="button" class="btn" id="workRequestRefresh">Refresh</button></div><p id="workRequestStatus" role="status"></p><div class="tablewrap"><table><thead><tr><th>Staff member</th><th>Dates (GST)</th><th>Reason / work</th><th>Status</th><th>Covering person</th><th>Review</th></tr></thead><tbody id="workRequestRows"></tbody></table></div><div class="pagination work-request-pagination"><button type="button" class="btn" id="workRequestPrevious">Previous</button><span id="workRequestPageLabel"></span><button type="button" class="btn" id="workRequestNext">Next</button></div></div>';
+ document.querySelector('main').append(page);
+ $('workRequestRefresh').onclick=()=>{workRequestPage=0;void switchAccount(activeAccount);};
+ $('workRequestPrevious').onclick=()=>{workRequestPage=Math.max(0,workRequestPage-1);void renderWorkRequests();};$('workRequestNext').onclick=()=>{workRequestPage++;void renderWorkRequests();};
+ $('workRequestForm').onsubmit=async event=>{
+  event.preventDefault();if(workRequestBusy||!ready||!user||!canRequestWork())return;
+  const uid=user.id,ticket=generation;workRequestBusy=true;$('workRequestSend').disabled=true;$('workRequestStatus').textContent='Sending request…';
+  try{check(await db.rpc('submit_work_request',{p_start:$('workRequestStart').value,p_end:$('workRequestEnd').value,p_reason:$('workRequestReason').value.trim()}));if(uid!==user?.id||ticket!==generation)return;$('workRequestForm').reset();workRequestPage=0;await renderWorkRequests();$('workRequestStatus').textContent='Request sent. Waiting for administrator approval.';}
+  catch(error){if(uid===user?.id&&ticket===generation)$('workRequestStatus').textContent=error.message;}
+  finally{workRequestBusy=false;$('workRequestSend').disabled=false;}
+ };
+}
+async function decideWorkRequest(id,decision,coverId=null,note=''){
+ if(workRequestBusy||!ready||!user)return;
+ if(decision==='approve'&&!coverId){$('workRequestStatus').textContent='Choose the person who will cover this work.';return;}
+ const uid=user.id,ticket=generation,buttonStates=[...document.querySelectorAll('#workRequestRows button')].map(button=>[button,button.disabled]);workRequestBusy=true;for(const [button] of buttonStates)button.disabled=true;$('workRequestSend').disabled=true;$('workRequestStatus').textContent='Saving decision…';
+ try{check(await db.rpc('decide_work_request',{p_request_id:id,p_decision:decision,p_cover_user_id:coverId,p_note:note}));if(uid!==user?.id||ticket!==generation)return;await renderWorkRequests();$('workRequestStatus').textContent=decision==='approve'?'Approved. Temporary ranking-entry access applies only during the requested dates.':decision==='reject'?'Request rejected.':'Request cancelled. Temporary cover access has ended.';}
+ catch(error){if(uid===user?.id&&ticket===generation)$('workRequestStatus').textContent=error.message;}
+ finally{workRequestBusy=false;for(const [button,disabled] of buttonStates)if(button.isConnected)button.disabled=disabled;$('workRequestSend').disabled=false;}
+}
+async function renderWorkRequests(){
+ const request=++workRequestLoad,ticket=generation,uid=user?.id;$('workRequestRows').replaceChildren();
+ if(!ready||!user||!canSeeWorkRequests())return;
+ const admin=canManageStaff();$('pageTitle').textContent=admin?'Work requests':'Request to admin';$('workRequestSubmitPanel').hidden=admin||!canRequestWork();$('workRequestHistoryTitle').textContent=admin?'Staff requests':'Request history and assigned cover';
+ $('workRequestStart').min=$('workRequestEnd').min=dubaiToday();$('workRequestStatus').textContent='Loading requests…';$('workRequestPrevious').disabled=$('workRequestNext').disabled=true;
+ try{
+  const rows=check(await db.from('work_requests').select('*').order('requested_at',{ascending:false}).order('id',{ascending:false}).range(workRequestPage*50,workRequestPage*50+50));let accounts=[];
+  if(admin&&rows.some(r=>r.status==='pending')){const {data,error}=await db.functions.invoke('admin-list-users',{body:{}});if(error)throw Error(await functionMessage(error,'Unable to load covering users.'));if(!data?.ok)throw Error(data?.error||'Unable to load covering users.');accounts=data.accounts||[];}
+  if(request!==workRequestLoad||ticket!==generation||uid!==user?.id)return;
+  for(const item of rows.slice(0,50)){
+   const tr=document.createElement('tr');tr.insertCell().textContent=item.requester_name;tr.insertCell().textContent=item.start_date+' → '+item.end_date;
+   const detailsCell=tr.insertCell();detailsCell.style.cssText='white-space:normal;min-width:240px;max-width:420px';const reason=document.createElement('p');reason.textContent=item.reason;const details=document.createElement('details'),summary=document.createElement('summary'),work=document.createElement('p');summary.textContent='Assigned work';work.textContent=item.scopes.map(s=>s.company+': '+s.markets.join(', ')).join('\n');work.style.whiteSpace='pre-line';details.append(summary,work);detailsCell.append(reason,details);
+   let status=item.status==='approved'?(item.end_date<dubaiToday()?'Completed':item.start_date>dubaiToday()?'Approved · Upcoming':'Approved · Active'):item.status.charAt(0).toUpperCase()+item.status.slice(1);
+   if(item.decided_name)status+='\nReviewed by '+item.decided_name;if(item.decision_note)status+='\n'+item.decision_note;const statusCell=tr.insertCell();statusCell.textContent=status;statusCell.style.whiteSpace='pre-line';tr.insertCell().textContent=item.cover_name||'—';
+   const actions=tr.insertCell();actions.style.whiteSpace='normal';
+   if(admin&&item.status==='pending'){
+    const select=document.createElement('select');select.setAttribute('aria-label','Choose covering person for '+item.requester_name);const placeholder=document.createElement('option');placeholder.value='';placeholder.textContent='Assign to…';select.append(placeholder);
+    const eligible=accounts.filter(a=>a.id!==item.requester_id&&a.username!=='fawaz@db'&&!a.memberships.some(m=>m.role==='auditor')&&item.scopes.every(s=>a.memberships.some(m=>m.companyId===s.company_id)));
+    for(const account of eligible){const option=document.createElement('option');option.value=account.id;option.textContent=account.username;select.append(option);}
+    const note=document.createElement('input');note.placeholder='Admin note (optional)';note.maxLength=2000;note.setAttribute('aria-label','Decision note for '+item.requester_name);note.style.cssText='display:block;margin:8px 0;max-width:220px';
+    const approve=document.createElement('button'),reject=document.createElement('button');approve.type=reject.type='button';approve.className='btn primary sm';reject.className='btn sm';approve.textContent='Accept and assign';reject.textContent='Reject';approve.disabled=!eligible.length;approve.onclick=()=>void decideWorkRequest(item.id,'approve',select.value,note.value);reject.onclick=()=>void decideWorkRequest(item.id,'reject',null,note.value);actions.append(select,note,approve,reject);
+   }else if((item.requester_id===uid||admin)&&['pending','approved'].includes(item.status)&&item.end_date>=dubaiToday()){
+    const cancel=document.createElement('button');cancel.type='button';cancel.className='btn sm';cancel.textContent=item.status==='approved'?'End cover early':'Cancel request';cancel.onclick=()=>void decideWorkRequest(item.id,'cancel');actions.append(cancel);
+   }else actions.textContent='—';$('workRequestRows').append(tr);
+  }
+  $('workRequestStatus').textContent=rows.length?'':'No requests yet.';$('workRequestPageLabel').textContent='Page '+(workRequestPage+1);$('workRequestPrevious').disabled=workRequestPage===0;$('workRequestNext').disabled=rows.length<=50;
+ }catch(error){if(request===workRequestLoad&&ticket===generation&&uid===user?.id)$('workRequestStatus').textContent='Unable to load requests: '+error.message;}
+}
 let staffRequest=0,staffResetTarget=null,staffResetBusy=false;
 function clearStaffUI(){
  staffRequest++;staffResetTarget=null;
@@ -342,7 +403,7 @@ function setupAuditUI(){
 }
 function auditValues(values){
  if(!values)return '—';
- return Object.entries(values).filter(([key])=>!['id','company_id','market_id','keyword_id','user_id','created_at','updated_at'].includes(key)).map(([key,value])=>key.replaceAll('_',' ')+': '+(key==='position'&&value===null?'Not Ranked':typeof value==='object'&&value!==null?JSON.stringify(value):String(value??'—'))).join('\n')||'—';
+ return Object.entries(values).filter(([key])=>!['id','created_at','updated_at'].includes(key)&&!key.endsWith('_id')).map(([key,value])=>key.replaceAll('_',' ')+': '+(key==='scopes'&&Array.isArray(value)?value.map(s=>s.company+': '+s.markets.join(', ')).join('; '):key==='position'&&value===null?'Not Ranked':typeof value==='object'&&value!==null?JSON.stringify(value):String(value??'—'))).join('\n')||'—';
 }
 async function renderAudit(){
  const request=++auditRequest,ticket=generation,uid=user?.id;
@@ -358,7 +419,7 @@ async function renderAudit(){
   const actions={INSERT:'Created',UPDATE:'Modified',DELETE:'Deleted',PASSWORD_CHANGED:'Password changed',PASSWORD_RESET:'Password reset',SIGNED_IN:'Signed in'};
   for(const item of rows.slice(0,50)){
    const tr=document.createElement('tr');
-   for(const value of [new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Dubai',dateStyle:'medium',timeStyle:'medium'}).format(new Date(item.occurred_at)),item.actor_name,actions[item.action]||item.action,item.company_name||'User accounts',item.entity_type.replaceAll('_',' ')+' · '+item.description]){const td=tr.insertCell();td.textContent=value;}
+   for(const value of [new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Dubai',dateStyle:'medium',timeStyle:'medium'}).format(new Date(item.occurred_at)),item.actor_name,actions[item.action]||item.action,item.company_name||(item.entity_type==='accounts'?'User accounts':'All companies'),item.entity_type.replaceAll('_',' ')+' · '+item.description]){const td=tr.insertCell();td.textContent=value;}
    const td=tr.insertCell(),details=document.createElement('details'),summary=document.createElement('summary'),before=document.createElement('pre'),after=document.createElement('pre');summary.textContent='View changes';before.textContent='Before\n'+auditValues(item.before_values);after.textContent='After\n'+auditValues(item.after_values);for(const pre of [before,after])pre.style.cssText='white-space:pre-wrap;max-width:420px;overflow-wrap:anywhere';details.append(summary,before,after);td.append(details);$('auditRows').append(tr);
   }
   $('auditStatus').textContent=rows.length?'':'No matching audit events.';$('auditPageLabel').textContent='Page '+(auditPage+1);$('auditPrevious').disabled=auditPage===0;$('auditNext').disabled=rows.length<=50;
@@ -367,13 +428,14 @@ async function renderAudit(){
 function wireUI(){
  setupAuditUI();
  setupStaffUI();
+ setupWorkRequestsUI();
  setupEntryKeywordSearch();
  setupManualSearch();
  document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshDateAccess();});
  document.addEventListener('change',e=>{if(e.target.closest('.filters'))pageOffsets.clear();},true);
  document.addEventListener('input',e=>{if(e.target.id==='rankSearch')pageOffsets.clear();},true);
  const actions={logout,goToReports,generateCurrentPDF,saveManualEntry,addKeyword,addMarket,clearData};document.querySelectorAll('[data-action]').forEach(el=>el.onclick=actions[el.dataset.action]);$('accountSelect').onchange=e=>switchAccount(e.target.value);
- const titles={dashboard:'SERP Dashboard',rankings:'Daily Rankings',history:'Keyword History',reports:'Monthly Reports',entry:'Manual SERP Entry',keywords:'Keyword Management',markets:'Countries / Markets',import:'Import / Data',audit:'Audit History',staffs:'Staffs'};
+ const titles={dashboard:'SERP Dashboard',rankings:'Daily Rankings',history:'Keyword History',reports:'Monthly Reports',entry:'Manual SERP Entry',keywords:'Keyword Management',markets:'Countries / Markets',import:'Import / Data',audit:'Audit History',staffs:'Staffs',requests:'Work requests'};
  document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>{if(!ready)return;document.querySelectorAll('.nav button,.page').forEach(x=>x.classList.remove('active'));b.classList.add('active');$(b.dataset.page).classList.add('active');$('pageTitle').textContent=titles[b.dataset.page];$('pageDesc').textContent=pageDescription();renderActivePage();});
  for(const id of ['rankMonth','rankCountry'])$(id).onchange=()=>{if(id==='rankMonth'&&$('rankDate').value&&!$('rankDate').value.startsWith($('rankMonth').value))$('rankDate').value='';renderRankings();};
  $('rankDate').onchange=()=>{const date=$('rankDate').value;if(date){const month=date.slice(0,7),select=$('rankMonth');if(![...select.options].some(o=>o.value===month)){const option=document.createElement('option');option.value=option.textContent=month;select.append(option);}select.value=month;}renderRankings();};$('rankSearch').oninput=renderRankings;
