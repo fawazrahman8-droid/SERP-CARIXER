@@ -2,6 +2,9 @@
 let db, user=null, companies=[], memberships=[], marketRecords=[], keywordRecords=[];
 let generation=0, busy=false, ready=false, recovery=false;
 let temporaryMarketNames=[];
+const pendingRankingSearches=new Map();
+let rankingAlertLoad=0,rankingAlertLatest=null;
+function searchUsageKey(company,keyword,market,date){return JSON.stringify([company,keyword,market,date]);}
 const pageOffsets=new Map();
 const $=id=>document.getElementById(id);
 const emptyState=()=>({rows:[],sheets:[],keywords:[],markets:[]});
@@ -86,7 +89,7 @@ function pageSlice(key,items,size,targetId,render){
  return {items:items.slice(offset,offset+size),offset};
 }
 function dailyAverages(rows,days){const totals=new Map();for(const r of rows){const v=totals.get(r.date)||[0,0];if(r.position!==null){v[0]+=r.position;v[1]++;}totals.set(r.date,v);}return days.map(d=>{const v=totals.get(d);return v&&v[1]?v[0]/v[1]:null;});}
-function clearPrivate(){clearWorkRequestsUI();temporaryMarketNames=[];clearStaffUI();clearTimeout(dateAccessTimer);loadedAccessDate='';setWorkspaceLoading(false);generation++;ready=false;activeAccount=null;state=emptyState();marketRecords=[];keywordRecords=[];document.querySelector('.app').hidden=true;for(const chart of [monthChart,historyChart,reportChart,rankDonut])chart?.destroy();monthChart=historyChart=reportChart=rankDonut=null;document.querySelectorAll('tbody,.keyword-list,#latestSnapshot,#donutLegend,#dashReportStats,#reportStats,#dataInfo').forEach(el=>el.replaceChildren());$('accountSelect').replaceChildren();}
+function clearPrivate(){rankingAlertLoad++;rankingAlertLatest=null;pendingRankingSearches.clear();document.querySelector('[data-page="staffs"]')?.replaceChildren(document.createTextNode('Staff info'));clearWorkRequestsUI();temporaryMarketNames=[];clearStaffUI();clearTimeout(dateAccessTimer);loadedAccessDate='';setWorkspaceLoading(false);generation++;ready=false;activeAccount=null;state=emptyState();marketRecords=[];keywordRecords=[];document.querySelector('.app').hidden=true;for(const chart of [monthChart,historyChart,reportChart,rankDonut])chart?.destroy();monthChart=historyChart=reportChart=rankDonut=null;document.querySelectorAll('tbody,.keyword-list,#latestSnapshot,#donutLegend,#dashReportStats,#reportStats,#dataInfo').forEach(el=>el.replaceChildren());$('accountSelect').replaceChildren();}
 async function allRows(table,companyId){let rows=[];for(let from=0;;from+=1000){let q=db.from(table).select('*').order('id').range(from,from+999);if(companyId)q=q.eq('company_id',companyId);const page=check(await q);rows.push(...page);if(page.length<1000)return rows;}}
 async function loadCompany(id){
  if(!companies.some(c=>c.id===id))throw Error('Company access is not available.');
@@ -106,7 +109,7 @@ async function loadCompany(id){
  rebuildFilters();$('accountSelect').value=id;$('entryAccount').textContent=companyLabel();$('pageDesc').textContent=pageDescription();
  $('sessionLabel').textContent=`${user.app_metadata?.username||user.email?.split('@')[0]||'Signed in'} · ${isEntryLimited()?entryRoleLabel()+' · Today entry only':canWrite()?'Admin':'Read only'}`;
  document.querySelectorAll('#entry button,#keywords button,#markets button,#import button,#fileInput').forEach(el=>el.disabled=!canWrite());
- applyRoleUI();ready=true;document.querySelector('.app').hidden=false;$('authScreen').hidden=true;
+ applyRoleUI();ready=true;void renderRankingAlerts();document.querySelector('.app').hidden=false;$('authScreen').hidden=true;
  if(canAudit()){ $('sessionLabel').textContent=(user.app_metadata?.username||'Signed in')+' · Auditor · Read only';document.querySelector('[data-page="audit"]').click(); }
  else if(document.querySelector('.page.active')?.id==='requests'&&canManageStaff())document.querySelector('[data-page="staffs"]').click();
  else if(document.querySelector('.page.active')?.id==='audit'||(document.querySelector('.page.active')?.id==='staffs'&&!canManageStaff())||(document.querySelector('.page.active')?.id==='requests'&&!canSeeWorkRequests()))document.querySelector('[data-page="dashboard"]').click();
@@ -153,6 +156,8 @@ async function saveManualEntry(){
  const k=keywordRecords.find(k=>k.keyword===keyword&&(k.market_id===market.id||k.market_id===null));if(!k)return notify('This keyword is not assigned to the selected market.');
  if(isEntryLimited()&&date!==dubaiToday())return notify('You can only add rankings for today in Dubai time.');
  if(isEntryLimited()&&state.rows.some(r=>r.keyword_id===k.id&&r.market_id===market.id&&r.date===date))return notify('Already entered for today. Only an admin can change this ranking.');
+ const searched=await pendingRankingSearches.get(searchUsageKey(activeAccount,k.id,market.id,date));
+ if(searched?.error)toast('Search could not be recorded. Saving will notify an admin.');
  await mutate(async id=>{const record={company_id:id,market_id:market.id,keyword_id:k.id,ranking_date:date,position,source:'manual'};
  const query=isEntryLimited()?db.from('rankings').insert(record):db.from('rankings').upsert(record,{onConflict:'keyword_id,market_id,ranking_date'});
  const result=await query.select().single();if(result.error?.code==='23505')throw Error('Already entered for today. Only an admin can change this ranking.');check(result);$('entryPosition').value='';},'Ranking saved',true);
@@ -309,6 +314,12 @@ function setupManualSearch(){
   if(!ready||!user||!keyword){notify('Select a keyword before searching.');$('entryKeywordSearch')?.focus();return;}
   const url=new URL('https://www.google.com/search');url.searchParams.set('q',keyword);
   window.open(url.href,'_blank','noopener,noreferrer');
+  const market=marketByName($('entryCountry').value),date=$('entryDate').value;
+  const k=keywordRecords.find(k=>k.keyword===keyword&&(k.market_id===market?.id||k.market_id===null));
+  if(!market||!k||!date)return;
+  const company=activeAccount,ticket=generation,uid=user.id;
+  const pending=db.rpc('record_ranking_search',{p_company:company,p_keyword:k.id,p_market:market.id,p_date:date}).then(result=>{if(result.error)throw result.error;return {};}).catch(error=>{if(company===activeAccount&&ticket===generation&&uid===user?.id)notify('Could not record Search: '+error.message);return {error};});
+  pendingRankingSearches.set(searchUsageKey(company,k.id,market.id,date),pending);
  };
  save.insertAdjacentElement('beforebegin',button);
 }
@@ -383,6 +394,7 @@ function setupStaffUI(){
  const button=document.createElement('button');button.type='button';button.dataset.page='staffs';button.hidden=true;button.textContent='Staff info';document.querySelector('.nav').append(button);
  const page=document.createElement('section');page.id='staffs';page.className='page';page.innerHTML='<div class="panel"><div class="sectiontitle"><h3>Login accounts</h3><button type="button" class="btn" id="staffRefresh">Refresh</button></div><p id="staffStatus" role="status"></p><div class="tablewrap"><table><thead><tr><th>Username</th><th>Role / companies</th><th>Last sign-in (GST)</th><th>Action</th></tr></thead><tbody id="staffRows"></tbody></table></div></div>';
  document.querySelector('main').append(page);
+ const alerts=document.createElement('div');alerts.className='panel';alerts.id='rankingAlertsPanel';alerts.innerHTML='<div class="sectiontitle"><h3>Ranking alerts</h3><button type="button" class="btn" id="rankingAlertsRefresh">Refresh</button></div><p id="rankingAlertsStatus" role="status"></p><div class="tablewrap"><table><thead><tr><th>Staff member</th><th>Keyword</th><th>Company / market</th><th>Saved (GST, UTC+4)</th><th>Warning</th></tr></thead><tbody id="rankingAlertsRows"></tbody></table></div>';page.prepend(alerts);$('rankingAlertsRefresh').onclick=()=>void renderRankingAlerts();
  const dialog=document.createElement('dialog');dialog.id='staffPasswordDialog';dialog.className='panel';dialog.style.cssText='width:min(480px,94vw);color:var(--text);background:var(--card);border:1px solid var(--line);border-radius:14px';
  dialog.innerHTML='<div class="sectiontitle"><h2>Change password</h2><button type="button" class="btn" id="staffPasswordClose">Close</button></div><p id="staffPasswordUsername"></p><form id="staffPasswordForm"><label for="staffPassword">New password</label><div style="display:flex;gap:8px;margin:8px 0"><input id="staffPassword" type="password" autocomplete="new-password" minlength="12" maxlength="128" required style="min-width:0;flex:1"><button type="button" class="btn" id="staffPasswordShow" aria-controls="staffPassword" aria-pressed="false">Show</button></div><p>Use at least 12 characters.</p><p id="staffPasswordStatus" role="status"></p><button type="submit" class="btn primary" id="staffPasswordSave">Save password</button></form>';
  document.body.append(dialog);$('staffRefresh').onclick=()=>void renderStaffs();
@@ -398,7 +410,7 @@ function setupStaffUI(){
   finally{staffResetBusy=false;$('staffPasswordSave').disabled=false;}
  };
 }
-async function renderStaffInfo(){await Promise.all([renderStaffs(),renderWorkRequests()]);}
+async function renderStaffInfo(){await Promise.all([renderStaffs(),renderWorkRequests(),renderRankingAlerts()]);}
 async function renderStaffs(){
  const request=++staffRequest,ticket=generation,uid=user?.id;$('staffRows').replaceChildren();
  if(!ready||!user||!canManageStaff())return;
@@ -449,9 +461,25 @@ async function renderAudit(){
   $('auditStatus').textContent=rows.length?'':'No matching audit events.';$('auditPageLabel').textContent='Page '+(auditPage+1);$('auditPrevious').disabled=auditPage===0;$('auditNext').disabled=rows.length<=50;
  }catch(error){if(request===auditRequest&&ticket===generation&&uid===user?.id)$('auditStatus').textContent='Unable to load audit history: '+error.message;}
 }
+async function renderRankingAlerts(){
+ const request=++rankingAlertLoad,uid=user?.id,ticket=generation,panel=$('rankingAlertsPanel');
+ if(!panel)return;panel.hidden=!canManageStaff();
+ if(!ready||!user||!canManageStaff()){$('rankingAlertsRows').replaceChildren();return;}
+ try{
+  const result=await db.from('staff_ranking_alerts').select('*',{count:'exact'}).order('created_at',{ascending:false}).order('id',{ascending:false}).limit(50);const rows=check(result);
+  if(request!==rankingAlertLoad||uid!==user?.id||ticket!==generation||!canManageStaff())return;
+  $('rankingAlertsRows').replaceChildren();
+  const names=new Map(companies.map(c=>[c.id,c.domain]));
+  for(const alert of rows){const tr=document.createElement('tr');for(const value of [alert.staff_name,alert.keyword_name,(names.get(alert.company_id)||'Company')+' / '+alert.market_name,new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Dubai',dateStyle:'medium',timeStyle:'short'}).format(new Date(alert.created_at)),alert.warning])tr.insertCell().textContent=value;$('rankingAlertsRows').append(tr);}
+  $('rankingAlertsStatus').textContent=rows.length?'Latest '+rows.length+' of '+(result.count??rows.length)+' alerts.':'No ranking alerts.';
+  const nav=document.querySelector('[data-page="staffs"]');nav.textContent='Staff info'+(result.count?' ('+result.count+' alert'+(result.count===1?'':'s')+')':'');
+  if(rows[0]&&rows[0].id!==rankingAlertLatest){rankingAlertLatest=rows[0].id;toast(rows[0].staff_name+' saved '+rows[0].keyword_name+' without using Search.');}
+ }catch(error){if(request===rankingAlertLoad&&uid===user?.id&&ticket===generation)$('rankingAlertsStatus').textContent='Could not load ranking alerts: '+error.message;}
+}
 function wireUI(){
  setupAuditUI();
  setupStaffUI();
+ setInterval(()=>{if(user&&ready&&canManageStaff())void renderRankingAlerts();},45000);
  setupWorkRequestsUI();
  setupEntryKeywordSearch();
  setupManualSearch();
