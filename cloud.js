@@ -472,7 +472,7 @@ async function renderRankingAlerts(){
   const names=new Map(companies.map(c=>[c.id,c.domain]));
   for(const alert of rows){const tr=document.createElement('tr');for(const value of [alert.staff_name,alert.keyword_name,(names.get(alert.company_id)||'Company')+' / '+alert.market_name,new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Dubai',dateStyle:'medium',timeStyle:'short'}).format(new Date(alert.created_at)),alert.warning])tr.insertCell().textContent=value;$('rankingAlertsRows').append(tr);}
   $('rankingAlertsStatus').textContent=rows.length?'Latest '+rows.length+' of '+(result.count??rows.length)+' alerts.':'No ranking alerts.';
-  const nav=document.querySelector('[data-page="staffs"]');nav.classList.toggle('ranking-alert-text',Boolean(result.count));nav.textContent='Staff info'+(result.count?' ('+result.count+' alert'+(result.count===1?'':'s')+')':'');
+  const nav=document.querySelector('[data-page="staffs"]');nav.classList.remove('ranking-alert-text');nav.textContent='Staff info';if(result.count){const badge=document.createElement('span');badge.className='ranking-alert-text';badge.textContent=' ('+result.count+' alert'+(result.count===1?'':'s')+')';nav.append(badge);}
   if(rows[0]&&rows[0].id!==rankingAlertLatest){rankingAlertLatest=rows[0].id;toast(rows[0].staff_name+' saved '+rows[0].keyword_name+' without using Search.','warning');}
  }catch(error){if(request===rankingAlertLoad&&uid===user?.id&&ticket===generation)$('rankingAlertsStatus').textContent='Could not load ranking alerts: '+error.message;}
 }
