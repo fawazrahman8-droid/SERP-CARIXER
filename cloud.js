@@ -89,7 +89,7 @@ function pageSlice(key,items,size,targetId,render){
  return {items:items.slice(offset,offset+size),offset};
 }
 function dailyAverages(rows,days){const totals=new Map();for(const r of rows){const v=totals.get(r.date)||[0,0];if(r.position!==null){v[0]+=r.position;v[1]++;}totals.set(r.date,v);}return days.map(d=>{const v=totals.get(d);return v&&v[1]?v[0]/v[1]:null;});}
-function clearPrivate(){rankingAlertLoad++;rankingAlertLatest=null;pendingRankingSearches.clear();document.querySelector('[data-page="staffs"]')?.replaceChildren(document.createTextNode('Staff info'));clearWorkRequestsUI();temporaryMarketNames=[];clearStaffUI();clearTimeout(dateAccessTimer);loadedAccessDate='';setWorkspaceLoading(false);generation++;ready=false;activeAccount=null;state=emptyState();marketRecords=[];keywordRecords=[];document.querySelector('.app').hidden=true;for(const chart of [monthChart,historyChart,reportChart,rankDonut])chart?.destroy();monthChart=historyChart=reportChart=rankDonut=null;document.querySelectorAll('tbody,.keyword-list,#latestSnapshot,#donutLegend,#dashReportStats,#reportStats,#dataInfo').forEach(el=>el.replaceChildren());$('accountSelect').replaceChildren();}
+function clearPrivate(){document.querySelector('[data-page="staffs"]')?.classList.remove('ranking-alert-text');rankingAlertLoad++;rankingAlertLatest=null;pendingRankingSearches.clear();document.querySelector('[data-page="staffs"]')?.replaceChildren(document.createTextNode('Staff info'));clearWorkRequestsUI();temporaryMarketNames=[];clearStaffUI();clearTimeout(dateAccessTimer);loadedAccessDate='';setWorkspaceLoading(false);generation++;ready=false;activeAccount=null;state=emptyState();marketRecords=[];keywordRecords=[];document.querySelector('.app').hidden=true;for(const chart of [monthChart,historyChart,reportChart,rankDonut])chart?.destroy();monthChart=historyChart=reportChart=rankDonut=null;document.querySelectorAll('tbody,.keyword-list,#latestSnapshot,#donutLegend,#dashReportStats,#reportStats,#dataInfo').forEach(el=>el.replaceChildren());$('accountSelect').replaceChildren();}
 async function allRows(table,companyId){let rows=[];for(let from=0;;from+=1000){let q=db.from(table).select('*').order('id').range(from,from+999);if(companyId)q=q.eq('company_id',companyId);const page=check(await q);rows.push(...page);if(page.length<1000)return rows;}}
 async function loadCompany(id){
  if(!companies.some(c=>c.id===id))throw Error('Company access is not available.');
@@ -157,7 +157,7 @@ async function saveManualEntry(){
  if(isEntryLimited()&&date!==dubaiToday())return notify('You can only add rankings for today in Dubai time.');
  if(isEntryLimited()&&state.rows.some(r=>r.keyword_id===k.id&&r.market_id===market.id&&r.date===date))return notify('Already entered for today. Only an admin can change this ranking.');
  const searched=await pendingRankingSearches.get(searchUsageKey(activeAccount,k.id,market.id,date));
- if(searched?.error)toast('Search could not be recorded. Saving will notify an admin.');
+ if(searched?.error)toast('Search could not be recorded. Saving will notify an admin.','warning');
  await mutate(async id=>{const record={company_id:id,market_id:market.id,keyword_id:k.id,ranking_date:date,position,source:'manual'};
  const query=isEntryLimited()?db.from('rankings').insert(record):db.from('rankings').upsert(record,{onConflict:'keyword_id,market_id,ranking_date'});
  const result=await query.select().single();if(result.error?.code==='23505')throw Error('Already entered for today. Only an admin can change this ranking.');check(result);$('entryPosition').value='';},'Ranking saved',true);
@@ -472,8 +472,8 @@ async function renderRankingAlerts(){
   const names=new Map(companies.map(c=>[c.id,c.domain]));
   for(const alert of rows){const tr=document.createElement('tr');for(const value of [alert.staff_name,alert.keyword_name,(names.get(alert.company_id)||'Company')+' / '+alert.market_name,new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Dubai',dateStyle:'medium',timeStyle:'short'}).format(new Date(alert.created_at)),alert.warning])tr.insertCell().textContent=value;$('rankingAlertsRows').append(tr);}
   $('rankingAlertsStatus').textContent=rows.length?'Latest '+rows.length+' of '+(result.count??rows.length)+' alerts.':'No ranking alerts.';
-  const nav=document.querySelector('[data-page="staffs"]');nav.textContent='Staff info'+(result.count?' ('+result.count+' alert'+(result.count===1?'':'s')+')':'');
-  if(rows[0]&&rows[0].id!==rankingAlertLatest){rankingAlertLatest=rows[0].id;toast(rows[0].staff_name+' saved '+rows[0].keyword_name+' without using Search.');}
+  const nav=document.querySelector('[data-page="staffs"]');nav.classList.toggle('ranking-alert-text',Boolean(result.count));nav.textContent='Staff info'+(result.count?' ('+result.count+' alert'+(result.count===1?'':'s')+')':'');
+  if(rows[0]&&rows[0].id!==rankingAlertLatest){rankingAlertLatest=rows[0].id;toast(rows[0].staff_name+' saved '+rows[0].keyword_name+' without using Search.','warning');}
  }catch(error){if(request===rankingAlertLoad&&uid===user?.id&&ticket===generation)$('rankingAlertsStatus').textContent='Could not load ranking alerts: '+error.message;}
 }
 function wireUI(){
