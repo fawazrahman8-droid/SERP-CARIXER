@@ -3,7 +3,7 @@ let state={rows:[],sheets:[],keywords:[],markets:[]};
 let monthChart,historyChart,reportChart,rankDonut;
 const months=['January','February','March','April','May','June','July','August','September','October','November','December'];
 
-function toast(t){let x=document.getElementById('toast');x.textContent=t;x.classList.add('show');setTimeout(()=>x.classList.remove('show'),2500)}
+function toast(t,kind){let x=document.getElementById('toast');x.textContent=t;x.classList.toggle('ranking-warning-toast',kind==='warning');x.classList.add('show');setTimeout(()=>x.classList.remove('show'),2500)}
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function num(v){if(v===null||v===undefined||v==='')return null; if(typeof v==='number')return isFinite(v)?v:null; let s=String(v).trim().toLowerCase(); if(['na','n/a','-','—','new','not found','>100'].includes(s))return s==='>100'?101:null; let n=parseFloat(s.replace(/,/g,'')); return isFinite(n)?n:null}
 function dateISO(v){
