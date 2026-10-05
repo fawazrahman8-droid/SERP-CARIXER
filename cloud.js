@@ -12,7 +12,8 @@ function canWrite(){return memberships.some(m=>m.company_id===activeAccount&&['o
 function canAudit(){return memberships.some(m=>m.role==='auditor');}
 function canManageStaff(){return !canAudit()&&memberships.some(m=>['owner','editor'].includes(m.role));}
 
-function isEntryLimited(){return memberships.some(m=>m.company_id===activeAccount&&['co_admin','staff'].includes(m.role));}
+function isEntryLimited(){return memberships.some(m=>m.company_id===activeAccount&&['co_admin','staff','head_staff'].includes(m.role));}
+function entryRoleLabel(){const role=memberships.find(m=>m.company_id===activeAccount)?.role;return role==='staff'?'Staff · Oman, Qatar, Kuwait':role==='head_staff'?'Head of staff':'Co-admin';}
 function dubaiToday(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Dubai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());}
 function usernameEmail(value){const username=value.trim().toLowerCase();if(username==='fawaz@db')return 'fawaz+db@users.serptrack.invalid';if(!/^[a-z0-9][a-z0-9._-]{2,39}$/.test(username))throw Error('Enter your assigned username.');return username+'@users.serptrack.invalid';}
 function pageDescription(){return companyLabel()+(isEntryLimited()?' · Add new rankings for today ('+dubaiToday()+', Dubai)':'');}
@@ -97,7 +98,7 @@ async function loadCompany(id){
  document.querySelectorAll('.filters input').forEach(el=>el.value='');
  document.querySelector('.app').hidden=false;
  rebuildFilters();$('accountSelect').value=id;$('entryAccount').textContent=companyLabel();$('pageDesc').textContent=pageDescription();
- $('sessionLabel').textContent=`${user.app_metadata?.username||user.email?.split('@')[0]||'Signed in'} · ${isEntryLimited()?(memberships.some(m=>m.company_id===activeAccount&&m.role==='staff')?'Staff · Oman, Qatar, Kuwait':'Co-admin')+' · Today entry only':canWrite()?'Admin':'Read only'}`;
+ $('sessionLabel').textContent=`${user.app_metadata?.username||user.email?.split('@')[0]||'Signed in'} · ${isEntryLimited()?entryRoleLabel()+' · Today entry only':canWrite()?'Admin':'Read only'}`;
  document.querySelectorAll('#entry button,#keywords button,#markets button,#import button,#fileInput').forEach(el=>el.disabled=!canWrite());
  applyRoleUI();ready=true;document.querySelector('.app').hidden=false;$('authScreen').hidden=true;
  if(canAudit()){ $('sessionLabel').textContent=(user.app_metadata?.username||'Signed in')+' · Auditor · Read only';document.querySelector('[data-page="audit"]').click(); }
@@ -320,7 +321,7 @@ async function renderStaffs(){
  try{
   const {data,error}=await db.functions.invoke('admin-list-users',{body:{}});if(error)throw Error(await functionMessage(error,'Unable to load accounts.'));if(!data?.ok)throw Error(data?.error||'Unable to load accounts.');
   if(request!==staffRequest||ticket!==generation||uid!==user?.id||!canManageStaff())return;
-  const roles={owner:'Admin',editor:'Admin',co_admin:'Co-admin',staff:'Staff',viewer:'Read only'};
+  const roles={owner:'Admin',editor:'Admin',co_admin:'Co-admin',head_staff:'Head of staff',staff:'Staff',viewer:'Read only'};
   const accounts=(data.accounts||[]).filter(a=>a.username!=='fawaz@db'&&!a.memberships?.some(m=>m.role==='auditor'));
   for(const account of accounts){const tr=document.createElement('tr');tr.insertCell().textContent=account.username;
    tr.insertCell().textContent=(account.memberships||[]).map(m=>(roles[m.role]||m.role)+' · '+m.company).join('; ');
