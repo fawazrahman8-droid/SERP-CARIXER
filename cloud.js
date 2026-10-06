@@ -130,6 +130,17 @@ async function loadCompany(id){
  else if(['staffs','requests'].includes(document.querySelector('.page.active')?.id))renderActivePage();
 }
 async function switchAccount(id){if(busy||!user)return;setBusy(true);notify('');setWorkspaceLoading(true);try{await loadCompany(id);notify('');}catch(e){ready=false;state=emptyState();document.querySelector('.app').hidden=true;$('authScreen').hidden=false;authMessage('Unable to load company: '+e.message+'. Sign in again to retry.');}finally{setWorkspaceLoading(false);setBusy(false);}}
+async function welcomeUser(account,ticket){
+ const loader=$('loader');const inner=document.createElement('div');inner.className='loader-inner welcome-loading';
+ const glow=document.createElement('div');glow.className='welcome-halo';glow.setAttribute('aria-hidden','true');
+ const heading=document.createElement('h2');heading.textContent='Welcome back';
+ const name=document.createElement('div');name.className='welcome-username';name.textContent=account.app_metadata?.username||account.email?.split('@')[0]||'Your workspace';
+ const caption=document.createElement('p');caption.textContent='Your workspace is ready.';
+ inner.append(glow,heading,name,caption);inner.setAttribute('role','status');loader.replaceChildren(inner);loader.classList.remove('hide');loader.setAttribute('aria-hidden','false');
+ await new Promise(resolve=>setTimeout(resolve,window.matchMedia('(prefers-reduced-motion: reduce)').matches?700:1800));
+ if(ticket===generation){document.querySelector('.app').classList.remove('welcome-reveal');void document.querySelector('.app').offsetWidth;document.querySelector('.app').classList.add('welcome-reveal');}
+ loader.dataset.workspaceLoader='';
+}
 async function openSession(session){
  if(!session){showCodeScreen(false);user=null;companies=[];memberships=[];clearPrivate();$('authScreen').hidden=false;$('authSignout').hidden=true;return;}
  const ticket=++generation;user=session.user;setBusy(true);notify('');setWorkspaceLoading(true);
@@ -142,6 +153,7 @@ async function openSession(session){
   $('accountSelect').innerHTML=cs.map(c=>`<option value="${esc(c.id)}">${esc(c.domain+' — '+c.name)}</option>`).join('');
   const defaultCompany=cs.find(c=>c.domain.toLowerCase()==='carwashtrolley.com')||cs[0];
   await loadCompany(defaultCompany.id);
+  if(ticket===generation&&ready)await welcomeUser(session.user,ticket);
  }catch(e){clearPrivate();$('authScreen').hidden=false;authMessage('Workspace could not load: '+e.message);}finally{setWorkspaceLoading(false);setBusy(false);notify('');}
 }
 async function logout(){showCodeScreen(false);clearPrivate();user=null;$('authSignout').hidden=true;$('authScreen').hidden=false;authMessage('Signed out.');try{check(await db.auth.signOut({scope:'local'}));}catch(e){authMessage('Workspace cleared. Sign-out failed: '+e.message+' Close this tab to discard its session.');}}
