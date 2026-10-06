@@ -158,7 +158,16 @@ async function openSession(session){
   if(ready&&user?.id===session.user.id)document.querySelector('.app').classList.add('welcome-reveal');
  }catch(e){clearPrivate();$('authScreen').hidden=false;authMessage('Workspace could not load: '+e.message);}finally{setWorkspaceLoading(false);setBusy(false);notify('');}
 }
-async function logout(){showCodeScreen(false);clearPrivate();user=null;$('authSignout').hidden=true;$('authScreen').hidden=false;authMessage('Signed out.');try{check(await db.auth.signOut({scope:'local'}));}catch(e){authMessage('Workspace cleared. Sign-out failed: '+e.message+' Close this tab to discard its session.');}}
+async function logout(){
+ if(document.getElementById('loader').classList.contains('signout-active'))return;
+ showCodeScreen(false);clearPrivate();user=null;$('authSignout').hidden=true;$('authScreen').hidden=true;setBusy(true);
+ const loader=$('loader');loader.replaceChildren();const inner=document.createElement('div');inner.className='loader-inner signout-loading';inner.setAttribute('role','status');inner.setAttribute('aria-live','polite');
+ const icon=document.createElement('div');icon.className='signout-icon';icon.setAttribute('aria-hidden','true');icon.textContent='↗';
+ const title=document.createElement('h2');title.textContent='Signing out';const subtitle=document.createElement('p');subtitle.textContent='Closing your workspace securely';inner.append(icon,title,subtitle);loader.append(inner);loader.classList.remove('hide');loader.classList.add('signout-active');loader.setAttribute('aria-hidden','false');
+ let error=null;await Promise.all([db.auth.signOut({scope:'local'}).then(check).catch(e=>{error=e;}),new Promise(resolve=>setTimeout(resolve,1400))]);
+ loader.classList.remove('signout-active');loader.dataset.workspaceLoader='';setWorkspaceLoading(false);setBusy(false);$('authScreen').hidden=false;authMessage(error?'Workspace cleared. Sign-out failed: '+error.message+' Close this tab to discard its session.':'Signed out.');
+}
+
 async function mutate(action,message,allowTodayInsert=false){
  if(busy)return;if(!ready||!user||!(canWrite()||(allowTodayInsert&&isEntryLimited()))){notify('An owner or editor membership is required.');return;}
  const id=activeAccount,ticket=generation;let saved=false;setBusy(true);notify('Saving…');
@@ -535,7 +544,7 @@ function wireUI(){
  $('cancelLoginCode').onclick=logout;
 }
 async function boot(){wireUI();$('loader').classList.add('hide');try{if(!window.supabase)throw Error('The website libraries failed to load. Reload to retry.');db=supabase.createClient(SERP_CONFIG.url,SERP_CONFIG.publishableKey,{auth:{persistSession:true,storage:sessionStorage,autoRefreshToken:true,detectSessionInUrl:true},global:{fetch:async(input,options={})=>fetch(input,{...options,signal:options.signal||AbortSignal.timeout(30000)})}});
- db.auth.onAuthStateChange((event,session)=>{if(event==='SIGNED_OUT'){showCodeScreen(false);user=null;$('authSignout').hidden=true;clearPrivate();$('authScreen').hidden=false;}if(event==='PASSWORD_RECOVERY'){showCodeScreen(false);recovery=true;clearPrivate();user=session.user;$('authScreen').hidden=false;$('email').value=session.user.app_metadata?.username||session.user.email.split('@')[0];$('password').value='';$('password').autocomplete='new-password';$('loginButton').textContent='Set new password';authMessage('Enter a new password to finish account setup or recovery.');}});
+ db.auth.onAuthStateChange((event,session)=>{if(event==='SIGNED_OUT'&&$('loader').classList.contains('signout-active'))return;if(event==='SIGNED_OUT'){showCodeScreen(false);user=null;$('authSignout').hidden=true;clearPrivate();$('authScreen').hidden=false;}if(event==='PASSWORD_RECOVERY'){showCodeScreen(false);recovery=true;clearPrivate();user=session.user;$('authScreen').hidden=false;$('email').value=session.user.app_metadata?.username||session.user.email.split('@')[0];$('password').value='';$('password').autocomplete='new-password';$('loginButton').textContent='Set new password';authMessage('Enter a new password to finish account setup or recovery.');}});
  const data=check(await db.auth.getSession());if(!recovery)await openSession(data.session);
  setInterval(async()=>{if(!ready||!user||busy||loginCheckPending)return;loginCheckPending=true;try{const status=check(await db.rpc('login_status'));if(!status.approved){clearPrivate();companies=[];memberships=[];await openSession(check(await db.auth.getSession()).session);}}catch{clearPrivate();authMessage('Your session could not be checked. Sign in again.');$('authScreen').hidden=false;}finally{loginCheckPending=false;}},30000);
  document.modelContext?.registerTool({name:'read_serp_workspace_summary',description:'Read counts for the signed-in, currently selected SERP company.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true,untrustedContentHint:true},execute(input){if(Object.keys(input||{}).length||!ready||!user)throw Error('A loaded authenticated workspace and empty input are required.');return {company:companyLabel(),markets:state.markets.length,keywords:state.keywords.length,rankings:state.rows.length};}});
