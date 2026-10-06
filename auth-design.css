@@ -181,3 +181,11 @@
 #loader.welcome-active .welcome-halo::before{animation:orbit-spin 1s linear infinite!important}
 #loader.welcome-active .welcome-halo::after{animation:welcome-arrow 1.2s ease-in-out infinite!important}
 
+#loader.signout-active{opacity:1!important;visibility:visible!important;display:flex!important;z-index:99999}
+.signout-loading{position:relative;z-index:2;text-align:center;padding:35px;animation:welcome-text-in .5s ease both}
+.signout-icon{position:relative;width:85px;height:85px;display:grid;place-items:center;margin:0 auto 32px;border:1px solid #a4d9ff25;border-radius:50%;font-size:38px;color:#acd9ff;animation:signout-drift 1.4s ease-in-out infinite!important}
+.signout-icon::before{content:'';position:absolute;inset:-6px;border:2px solid transparent;border-top-color:#a4d9ff;border-right-color:#a4d9ff40;border-radius:50%;animation:orbit-spin 1s linear infinite!important}
+.signout-loading h2{color:#edf6ff;font-size:clamp(30px,4vw,46px);font-weight:600;letter-spacing:-1px;margin:0;animation:welcome-text-in .65s ease both!important}
+.signout-loading p{color:#96aeca;font-size:13px;margin:18px 0 0;animation:welcome-text-in .7s .15s ease both!important}
+@keyframes signout-drift{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+
