@@ -80,7 +80,7 @@ function setWorkspaceLoading(value){
 }
 function check(result){if(result.error)throw result.error;return result.data;}
 function setBusy(value){busy=value;document.body.classList.toggle('busy',value);$('accountSelect').disabled=value;$('loginButton').disabled=value;}
-function clearRenderedPages(){
+function clearRenderedPages(){cancelDonutEntrance();
  pageOffsets.clear();
  for(const chart of [monthChart,historyChart,reportChart,rankDonut])chart?.destroy();
  monthChart=historyChart=reportChart=rankDonut=null;
@@ -103,7 +103,7 @@ function pageSlice(key,items,size,targetId,render){
  return {items:items.slice(offset,offset+size),offset};
 }
 function dailyAverages(rows,days){const totals=new Map();for(const r of rows){const v=totals.get(r.date)||[0,0];if(r.position!==null){v[0]+=r.position;v[1]++;}totals.set(r.date,v);}return days.map(d=>{const v=totals.get(d);return v&&v[1]?v[0]/v[1]:null;});}
-function clearPrivate(){document.querySelector('[data-page="staffs"]')?.classList.remove('ranking-alert-text');rankingAlertLoad++;rankingAlertLatest=null;pendingRankingSearches.clear();document.querySelector('[data-page="staffs"]')?.replaceChildren(document.createTextNode('Staff info'));clearWorkRequestsUI();temporaryMarketNames=[];clearStaffUI();clearTimeout(dateAccessTimer);loadedAccessDate='';setWorkspaceLoading(false);generation++;ready=false;activeAccount=null;state=emptyState();marketRecords=[];keywordRecords=[];document.querySelector('.app').hidden=true;for(const chart of [monthChart,historyChart,reportChart,rankDonut])chart?.destroy();monthChart=historyChart=reportChart=rankDonut=null;document.querySelectorAll('tbody,.keyword-list,#latestSnapshot,#donutLegend,#dashReportStats,#reportStats,#dataInfo').forEach(el=>el.replaceChildren());$('accountSelect').replaceChildren();}
+function clearPrivate(){cancelDonutEntrance();document.querySelector('[data-page="staffs"]')?.classList.remove('ranking-alert-text');rankingAlertLoad++;rankingAlertLatest=null;pendingRankingSearches.clear();document.querySelector('[data-page="staffs"]')?.replaceChildren(document.createTextNode('Staff info'));clearWorkRequestsUI();temporaryMarketNames=[];clearStaffUI();clearTimeout(dateAccessTimer);loadedAccessDate='';setWorkspaceLoading(false);generation++;ready=false;activeAccount=null;state=emptyState();marketRecords=[];keywordRecords=[];document.querySelector('.app').hidden=true;for(const chart of [monthChart,historyChart,reportChart,rankDonut])chart?.destroy();monthChart=historyChart=reportChart=rankDonut=null;document.querySelectorAll('tbody,.keyword-list,#latestSnapshot,#donutLegend,#dashReportStats,#reportStats,#dataInfo').forEach(el=>el.replaceChildren());$('accountSelect').replaceChildren();}
 async function allRows(table,companyId){let rows=[];for(let from=0;;from+=1000){let q=db.from(table).select('*').order('id').range(from,from+999);if(companyId)q=q.eq('company_id',companyId);const page=check(await q);rows.push(...page);if(page.length<1000)return rows;}}
 async function loadCompany(id){
  if(!companies.some(c=>c.id===id))throw Error('Company access is not available.');
