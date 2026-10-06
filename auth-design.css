@@ -68,3 +68,18 @@
 @media(max-width:700px){.auth-layout{display:flex;flex-direction:column}.auth-pane{padding:28px 30px;min-height:650px}.auth-form-area{padding:45px 0 35px}.auth-pane .auth-card{max-width:390px}.auth-pane .auth-card h1{font-size:36px}.auth-showcase{min-height:500px}.brand-slide{padding:80px 30px 95px;min-height:500px}.brand-poster{min-height:230px;width:320px;border-radius:18px;padding:38px 20px 24px}.brand-icon{width:45px;height:45px;margin-bottom:15px}.brand-name{font-size:38px}.trolley .brand-name{font-size:30px}.brand-domain{font-size:9px;margin-top:12px}.poster-rule{margin-top:18px}.showcase-caption{margin-top:20px}.showcase-caption h2{font-size:18px}.auth-showcase-top{top:25px}.brand-pagination{bottom:24px}.auth-showcase .showcase-side-note{display:none}}
 @media(prefers-reduced-motion:reduce){.brand-track,.auth-pane .auth-card input,.auth-pane .auth-card .primary{transition:none}.brand-track{will-change:auto}}
 
+/* Each company moves right; the next enters from the left, including the loop. */
+.brand-track{display:grid;transition:none;will-change:auto}
+.brand-slide{grid-area:1 / 1;visibility:hidden;pointer-events:none}
+.brand-slide.is-active{visibility:visible;pointer-events:auto;z-index:2}
+.brand-slide.slide-out-right,.brand-slide.slide-out-left{visibility:visible;z-index:1}
+.slide-in-right{animation:brand-enter-right .9s cubic-bezier(.22,.68,0,1) both}
+.slide-out-right{animation:brand-exit-right .9s cubic-bezier(.22,.68,0,1) both}
+.slide-in-left{animation:brand-enter-left .9s cubic-bezier(.22,.68,0,1) both}
+.slide-out-left{animation:brand-exit-left .9s cubic-bezier(.22,.68,0,1) both}
+@keyframes brand-enter-right{from{transform:translateX(-100%)}to{transform:translateX(0)}}
+@keyframes brand-exit-right{from{transform:translateX(0)}to{transform:translateX(100%)}}
+@keyframes brand-enter-left{from{transform:translateX(100%)}to{transform:translateX(0)}}
+@keyframes brand-exit-left{from{transform:translateX(0)}to{transform:translateX(-100%)}}
+@media(prefers-reduced-motion:reduce){.brand-slide{animation:none!important}}
+
