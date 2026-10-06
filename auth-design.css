@@ -172,3 +172,12 @@
 @keyframes welcome-soft-fade{from{opacity:0}to{opacity:1}}
 @keyframes welcome-ring-pulse{0%,100%{opacity:.4}50%{opacity:1}}
 
+/* Explicit welcome motion requested for this screen. */
+#loader.welcome-active{background-color:#0b1729;opacity:1!important}
+#loader.welcome-active .welcome-loading h2{animation:welcome-text-in .85s .1s ease both!important}
+#loader.welcome-active .welcome-username{animation:welcome-text-in 1.05s .45s ease both!important}
+#loader.welcome-active .welcome-loading p{animation:welcome-text-in .8s .95s ease both!important}
+#loader.welcome-active .welcome-halo{animation:welcome-icon-in .7s ease both!important}
+#loader.welcome-active .welcome-halo::before{animation:orbit-spin 1s linear infinite!important}
+#loader.welcome-active .welcome-halo::after{animation:welcome-arrow 1.2s ease-in-out infinite!important}
+
