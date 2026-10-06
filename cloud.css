@@ -47,3 +47,7 @@
 @media(prefers-reduced-motion:reduce){.page.active{animation:page-fade .22s ease both}}
 @keyframes page-fade{from{opacity:0}to{opacity:1}}
 
+/* Only the doughnut canvas turns; centre text and legend remain still. */
+#rankDonut{transform-origin:50% 50%}
+#rankDonut.donut-entering{pointer-events:none}
+
