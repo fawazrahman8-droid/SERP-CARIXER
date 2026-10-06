@@ -137,7 +137,7 @@ async function welcomeUser(account,ticket){
  const name=document.createElement('div');name.className='welcome-username';name.textContent=account.app_metadata?.username||account.email?.split('@')[0]||'Your workspace';
  const caption=document.createElement('p');caption.textContent='Your workspace is ready.';
  inner.append(glow,heading,name,caption);inner.setAttribute('role','status');loader.replaceChildren(inner);loader.classList.remove('hide');loader.classList.add('welcome-active');loader.setAttribute('aria-hidden','false');
- await new Promise(resolve=>setTimeout(resolve,window.matchMedia('(prefers-reduced-motion: reduce)').matches?1800:2600));
+ await new Promise(resolve=>setTimeout(resolve,3000));
  if(ticket===generation){document.querySelector('.app').classList.remove('welcome-reveal');void document.querySelector('.app').offsetWidth;document.querySelector('.app').classList.add('welcome-reveal');}
  loader.dataset.workspaceLoader='';
 }
