@@ -137,7 +137,7 @@ async function welcomeUser(account,ticket){
  const name=document.createElement('div');name.className='welcome-username';name.textContent=account.app_metadata?.username||account.email?.split('@')[0]||'Your workspace';
  const caption=document.createElement('p');caption.textContent='Your workspace is ready.';
  inner.append(glow,heading,name,caption);inner.setAttribute('role','status');loader.replaceChildren(inner);loader.classList.remove('hide');loader.setAttribute('aria-hidden','false');
- await new Promise(resolve=>setTimeout(resolve,window.matchMedia('(prefers-reduced-motion: reduce)').matches?700:1800));
+ await new Promise(resolve=>setTimeout(resolve,window.matchMedia('(prefers-reduced-motion: reduce)').matches?1800:2600));
  if(ticket===generation){document.querySelector('.app').classList.remove('welcome-reveal');void document.querySelector('.app').offsetWidth;document.querySelector('.app').classList.add('welcome-reveal');}
  loader.dataset.workspaceLoader='';
 }
@@ -153,7 +153,7 @@ async function openSession(session){
   $('accountSelect').innerHTML=cs.map(c=>`<option value="${esc(c.id)}">${esc(c.domain+' — '+c.name)}</option>`).join('');
   const defaultCompany=cs.find(c=>c.domain.toLowerCase()==='carwashtrolley.com')||cs[0];
   await loadCompany(defaultCompany.id);
-  if(ticket===generation&&ready)await welcomeUser(session.user,ticket);
+  if(ready&&user?.id===session.user.id)await welcomeUser(session.user,generation);
  }catch(e){clearPrivate();$('authScreen').hidden=false;authMessage('Workspace could not load: '+e.message);}finally{setWorkspaceLoading(false);setBusy(false);notify('');}
 }
 async function logout(){showCodeScreen(false);clearPrivate();user=null;$('authSignout').hidden=true;$('authScreen').hidden=false;authMessage('Signed out.');try{check(await db.auth.signOut({scope:'local'}));}catch(e){authMessage('Workspace cleared. Sign-out failed: '+e.message+' Close this tab to discard its session.');}}
