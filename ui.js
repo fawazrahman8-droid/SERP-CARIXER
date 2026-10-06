@@ -63,6 +63,28 @@ function monthlyRows(month,country){
  for(const k of state.keywords){if(country&&country!=='ALL'&&k.market!==country)continue;const key=JSON.stringify([k.name,k.market]);if(!grouped.has(key)&&(!month||month==='ALL'||k.addedAt.slice(0,7)<=month))grouped.set(key,{name:k.name,market:k.market,rows:[]});}
  return [...grouped.values()].sort((a,b)=>a.name.localeCompare(b.name)||a.market.localeCompare(b.market)).map(k=>{const rows=k.rows.sort((a,b)=>a.date.localeCompare(b.date));return {keyword:k.name+(!country||country==='ALL'?' · '+(k.market||'Unassigned'):''),start:rows[0]?.position??null,end:rows.at(-1)?.position??null,rows};});
 }
+let donutEntranceAnimation=null,donutEntranceViewport=null,donutEntranceLoader=null,donutEntranceTimer=null,donutEntranceRun=0;
+function cancelDonutEntrance(){
+ donutEntranceRun++; clearTimeout(donutEntranceTimer);donutEntranceTimer=null;donutEntranceViewport?.disconnect();donutEntranceLoader?.disconnect();donutEntranceAnimation?.cancel();donutEntranceAnimation=null;document.getElementById('rankDonut')?.classList.remove('donut-entering');
+}
+function queueDonutEntrance(){
+ const canvas=document.getElementById('rankDonut'),loader=document.getElementById('loader');
+ cancelDonutEntrance();
+ if(!canvas.animate||!window.IntersectionObserver)return;
+ const run=donutEntranceRun;let inView=false,started=false;
+ const start=()=>{
+  if(run!==donutEntranceRun||started||!inView||document.querySelector('.app').hidden||!document.getElementById('dashboard').classList.contains('active')||(loader&&!loader.classList.contains('hide')))return;
+  if(loader&&getComputedStyle(loader).visibility!=='hidden'){if(!donutEntranceTimer)donutEntranceTimer=setTimeout(()=>{donutEntranceTimer=null;start();},600);return;}
+  started=true;donutEntranceViewport.disconnect();donutEntranceLoader?.disconnect();canvas.classList.add('donut-entering');
+  const animation=canvas.animate([{transform:'rotate(-180deg)',opacity:.35},{transform:'rotate(0deg)',opacity:1}],{duration:1200,easing:'cubic-bezier(.16,1,.3,1)',iterations:1});
+  donutEntranceAnimation=animation;
+  const finish=()=>{if(donutEntranceAnimation===animation){canvas.classList.remove('donut-entering');donutEntranceAnimation=null;}};
+  animation.finished.then(finish,finish);
+ };
+ donutEntranceViewport=new IntersectionObserver(entries=>{inView=entries.some(entry=>entry.isIntersecting&&entry.intersectionRatio>=.35);start();},{threshold:.35});
+ donutEntranceViewport.observe(canvas);
+ if(loader){donutEntranceLoader=new MutationObserver(start);donutEntranceLoader.observe(loader,{attributes:true,attributeFilter:['class']});}
+}
 function updateRankDonut(month,country){
   const rr=monthlyRows(month,country);
   const cats={"Top 1":0,"Top 10":0,"Top 100":0,"Not Ranked":0};
@@ -72,6 +94,7 @@ function updateRankDonut(month,country){
   document.getElementById('donutScope').textContent=(month?month:'All months')+' · '+(country==='ALL'?'All countries':country);
   if(rankDonut)rankDonut.destroy();
   rankDonut=new SafeChart(document.getElementById('rankDonut'),{type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:['#16a34a','#2563eb','#d97706','#475569'],borderColor:'#fff',borderWidth:3,hoverOffset:7}]},options:{cutout:'68%',plugins:{legend:{display:false},tooltip:{callbacks:{label:(ctx)=>{const v=ctx.raw||0;const pct=total?(v/total*100).toFixed(1):0;return ` ${ctx.label}: ${v} (${pct}%)`;}}}}}});
+  queueDonutEntrance();
   document.getElementById('donutLegend').innerHTML=labels.map((l,i)=>{const pct=total?(vals[i]/total*100).toFixed(1):0;const colors=['#16a34a','#2563eb','#d97706','#475569'];return `<div class="legend-row"><span class="legend-dot" style="background:${colors[i]}"></span><span>${l}</span><b>${vals[i]} <small style="color:var(--muted);font-weight:500">(${pct}%)</small></b></div>`}).join('');
 }
 function updateDashboard(){
