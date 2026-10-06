@@ -114,14 +114,3 @@
 @media(max-width:950px){.trusted-brands{padding:55px 30px}.trusted-brand h3{font-size:29px}.trusted-brand:nth-child(4) h3{font-size:26px}.trusted-brand:nth-child(even){padding-left:22px}.trusted-brand:nth-child(odd){padding-right:18px}}
 @media(max-width:700px){.trusted-brands{min-height:500px;padding:45px 32px}.trusted-brands-content>h2{font-size:27px;margin-bottom:18px;padding-bottom:24px}.trusted-brand{min-height:140px;padding-top:27px;padding-bottom:27px}.trusted-brand:nth-child(n+3){padding-top:30px}.trusted-brand h3{font-size:28px}.trusted-brand:nth-child(4) h3{font-size:25px}.trusted-brand p{font-size:9px}}
 
-.trusted-brand:nth-child(4) h3{white-space:nowrap;font-size:clamp(17px,1.75vw,28px);letter-spacing:-.7px}
-@media(max-width:950px){.trusted-brand:nth-child(4) h3{font-size:clamp(14px,1.8vw,19px);letter-spacing:-.5px}}
-@media(max-width:700px){.trusted-brand:nth-child(4) h3{font-size:clamp(12px,3.3vw,22px);letter-spacing:-.5px}}
-
-/* Give the longer name a full row so its type stays the same size. */
-.trusted-brand:nth-child(4){grid-column:1 / -1;padding-left:0;border-top:1px solid #b5c9d51c;padding-top:30px}
-.trusted-brand:nth-child(3){border-right:0}
-.trusted-brand:nth-child(4) h3{font-size:clamp(27px,3vw,45px);font-weight:600;letter-spacing:-1px}
-@media(max-width:950px){.trusted-brand:nth-child(4) h3{font-size:29px}}
-@media(max-width:700px){.trusted-brand:nth-child(4) h3{font-size:28px}}
-
