@@ -83,3 +83,14 @@
 @keyframes brand-exit-left{from{transform:translateX(0)}to{transform:translateX(-100%)}}
 @media(prefers-reduced-motion:reduce){.brand-slide{animation:none!important}}
 
+/* All partner brands appear together without cards or slideshow controls. */
+.trusted-brands{display:flex;align-items:center;justify-content:center;padding:72px 48px;background:radial-gradient(ellipse at 90% 10%,#28679570,transparent 65%),linear-gradient(140deg,#174573,#071526)}
+.trusted-brands-content{width:100%;max-width:650px}
+.trusted-brands-content>h2{text-align:center;font-size:14px;letter-spacing:3px;font-weight:600;color:#bdd8f0;margin:0 0 65px;line-height:1.6}
+.trusted-brands-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:70px 36px;align-items:center}
+.trusted-brand{text-align:center;min-width:0}
+.trusted-brand h3{font-size:clamp(26px,3.2vw,48px);line-height:1.15;letter-spacing:-1px;color:#fff;font-weight:750;margin:0}
+.trusted-brand p{font-size:11px;letter-spacing:1.5px;color:#a8bed3;margin:16px 0 0}
+@media(max-width:950px){.trusted-brands{padding:60px 25px}.trusted-brands-grid{gap:55px 20px}.trusted-brand h3{font-size:28px}.trusted-brand p{font-size:10px;letter-spacing:.8px}}
+@media(max-width:700px){.trusted-brands{min-height:470px;padding:55px 25px}.trusted-brands-content>h2{margin-bottom:45px;font-size:12px;letter-spacing:2px}.trusted-brands-grid{gap:45px 20px}.trusted-brand h3{font-size:28px}}
+
