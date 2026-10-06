@@ -158,3 +158,17 @@
 
 #loader.welcome-active{opacity:1!important;visibility:visible!important;display:flex!important;z-index:99999}
 
+/* Deliberate, staggered welcome reveal with gentle motion. */
+#loader .welcome-loading{animation:none!important}
+#loader .welcome-loading h2{animation:welcome-text-in .85s .1s ease both!important}
+#loader .welcome-username{animation:welcome-text-in 1.05s .45s cubic-bezier(.2,.7,.2,1) both!important}
+#loader .welcome-loading p{animation:welcome-text-in .8s .95s ease both!important}
+#loader .welcome-halo{animation:welcome-icon-in .7s ease both!important}
+#loader .welcome-halo::before{animation:orbit-spin 1.35s linear infinite!important}
+#loader .welcome-halo::after{animation:welcome-arrow 1.5s ease-in-out infinite!important}
+@keyframes welcome-text-in{0%{opacity:0;transform:translateY(18px)}100%{opacity:1;transform:translateY(0)}}
+@keyframes welcome-icon-in{from{opacity:0;transform:scale(.8)}to{opacity:1;transform:scale(1)}}
+@media(prefers-reduced-motion:reduce){#loader .welcome-loading h2,#loader .welcome-username,#loader .welcome-loading p{animation:welcome-soft-fade .7s ease both!important}#loader .welcome-halo{animation:welcome-soft-fade .7s ease both!important}#loader .welcome-halo::before{animation:welcome-ring-pulse 1.8s ease-in-out infinite!important}#loader .welcome-halo::after{animation:none!important}}
+@keyframes welcome-soft-fade{from{opacity:0}to{opacity:1}}
+@keyframes welcome-ring-pulse{0%,100%{opacity:.4}50%{opacity:1}}
+
