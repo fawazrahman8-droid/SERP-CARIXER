@@ -150,3 +150,9 @@
 @keyframes dashboard-reveal{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 @media(prefers-reduced-motion:reduce){.welcome-reveal,.welcome-loading,.welcome-loading *{animation:none!important}}
 
+.welcome-halo{width:100px;height:100px;border:1px solid #80c4ff30;background:radial-gradient(circle,#5baaff20,transparent 65%);box-shadow:0 0 65px #5aabff25;border-radius:50%;position:relative;margin-bottom:32px;animation:welcome-appear .6s ease both}
+.welcome-halo::before{content:'';position:absolute;inset:-5px;border:2px solid transparent;border-top-color:#a4d9ff;border-right-color:#65b2ff45;border-radius:50%;animation:orbit-spin 1.8s linear infinite;filter:drop-shadow(0 0 8px #69baff)}
+.welcome-halo::after{content:'↗';position:absolute;inset:0;display:grid;place-items:center;color:#b8e2ff;font-size:42px;animation:welcome-arrow 1.3s ease-in-out infinite}
+@keyframes welcome-arrow{0%,100%{transform:translate(-3px,3px);opacity:.65}50%{transform:translate(3px,-3px);opacity:1}}
+@media(prefers-reduced-motion:reduce){.welcome-halo::before,.welcome-halo::after{animation:none!important}}
+
