@@ -71,7 +71,7 @@ function authMessage(message){$('authMessage').textContent=message;}
 function setWorkspaceLoading(value){
  const loader=$('loader');
  if(value&&!loader.dataset.workspaceLoader){
-  loader.innerHTML='<div class="loader-inner workspace-loading"><div class="loader-logo">SERP <span>TRACK</span></div><div class="workspace-spinner" aria-hidden="true"></div><div role="status" aria-live="polite"><h2>Loading your workspace…</h2><p>Preparing your rankings and dashboard.</p></div></div>';
+  loader.innerHTML="<div class=\"loader-inner premium-loading\"><div class=\"loading-orbit\" aria-hidden=\"true\"><div class=\"orbit-ring\"></div><div class=\"ranking-signal\"><i></i><i></i><i></i><i></i><svg viewBox=\"0 0 120 80\"><path d=\"M10 65L38 45L63 51L106 12\"/><path d=\"M85 12h21v21\"/></svg></div></div><div class=\"loader-logo\">SERP <span>TRACK</span></div><div class=\"loading-caption\" role=\"status\" aria-live=\"polite\">Preparing your ranking workspace</div><div class=\"loading-progress\" aria-hidden=\"true\"><i></i></div></div>";
   loader.dataset.workspaceLoader='true';
  }
  loader.classList.toggle('hide',!value);
