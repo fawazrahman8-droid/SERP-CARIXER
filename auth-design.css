@@ -118,3 +118,10 @@
 @media(max-width:950px){.trusted-brand:nth-child(4) h3{font-size:clamp(14px,1.8vw,19px);letter-spacing:-.5px}}
 @media(max-width:700px){.trusted-brand:nth-child(4) h3{font-size:clamp(12px,3.3vw,22px);letter-spacing:-.5px}}
 
+/* Give the longer name a full row so its type stays the same size. */
+.trusted-brand:nth-child(4){grid-column:1 / -1;padding-left:0;border-top:1px solid #b5c9d51c;padding-top:30px}
+.trusted-brand:nth-child(3){border-right:0}
+.trusted-brand:nth-child(4) h3{font-size:clamp(27px,3vw,45px);font-weight:600;letter-spacing:-1px}
+@media(max-width:950px){.trusted-brand:nth-child(4) h3{font-size:29px}}
+@media(max-width:700px){.trusted-brand:nth-child(4) h3{font-size:28px}}
+
