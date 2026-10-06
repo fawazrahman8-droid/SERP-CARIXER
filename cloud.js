@@ -74,7 +74,7 @@ function setWorkspaceLoading(value){
   loader.innerHTML="<div class=\"loader-inner premium-loading\"><div class=\"loading-orbit\" aria-hidden=\"true\"><div class=\"orbit-ring\"></div><div class=\"ranking-signal\"><i></i><i></i><i></i><i></i><svg viewBox=\"0 0 120 80\"><path d=\"M10 65L38 45L63 51L106 12\"/><path d=\"M85 12h21v21\"/></svg></div></div><div class=\"loader-logo\">SERP <span>TRACK</span></div><div class=\"loading-caption\" role=\"status\" aria-live=\"polite\">Preparing your ranking workspace</div><div class=\"loading-progress\" aria-hidden=\"true\"><i></i></div></div>";
   loader.dataset.workspaceLoader='true';
  }
- loader.classList.toggle('hide',!value);
+ if(!value)loader.classList.remove('welcome-active');loader.classList.toggle('hide',!value);
  loader.setAttribute('aria-hidden',String(!value));
  $('authScreen').inert=value;
 }
@@ -136,7 +136,7 @@ async function welcomeUser(account,ticket){
  const heading=document.createElement('h2');heading.textContent='Welcome back';
  const name=document.createElement('div');name.className='welcome-username';name.textContent=account.app_metadata?.username||account.email?.split('@')[0]||'Your workspace';
  const caption=document.createElement('p');caption.textContent='Your workspace is ready.';
- inner.append(glow,heading,name,caption);inner.setAttribute('role','status');loader.replaceChildren(inner);loader.classList.remove('hide');loader.setAttribute('aria-hidden','false');
+ inner.append(glow,heading,name,caption);inner.setAttribute('role','status');loader.replaceChildren(inner);loader.classList.remove('hide');loader.classList.add('welcome-active');loader.setAttribute('aria-hidden','false');
  await new Promise(resolve=>setTimeout(resolve,window.matchMedia('(prefers-reduced-motion: reduce)').matches?1800:2600));
  if(ticket===generation){document.querySelector('.app').classList.remove('welcome-reveal');void document.querySelector('.app').offsetWidth;document.querySelector('.app').classList.add('welcome-reveal');}
  loader.dataset.workspaceLoader='';
@@ -152,8 +152,10 @@ async function openSession(session){
   if(!cs.length){clearPrivate();$('authScreen').hidden=false;authMessage('Signed in, but no company membership has been assigned. Ask your administrator to assign company access.');return;}
   $('accountSelect').innerHTML=cs.map(c=>`<option value="${esc(c.id)}">${esc(c.domain+' — '+c.name)}</option>`).join('');
   const defaultCompany=cs.find(c=>c.domain.toLowerCase()==='carwashtrolley.com')||cs[0];
+  const welcome=welcomeUser(session.user,generation);
   await loadCompany(defaultCompany.id);
-  if(ready&&user?.id===session.user.id)await welcomeUser(session.user,generation);
+  await welcome;
+  if(ready&&user?.id===session.user.id)document.querySelector('.app').classList.add('welcome-reveal');
  }catch(e){clearPrivate();$('authScreen').hidden=false;authMessage('Workspace could not load: '+e.message);}finally{setWorkspaceLoading(false);setBusy(false);notify('');}
 }
 async function logout(){showCodeScreen(false);clearPrivate();user=null;$('authSignout').hidden=true;$('authScreen').hidden=false;authMessage('Signed out.');try{check(await db.auth.signOut({scope:'local'}));}catch(e){authMessage('Workspace cleared. Sign-out failed: '+e.message+' Close this tab to discard its session.');}}
