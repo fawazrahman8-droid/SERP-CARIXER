@@ -419,9 +419,10 @@ async function renderWorkRequests(){
   $('workRequestStatus').textContent=rows.length?'':'No requests yet.';$('workRequestPageLabel').textContent='Page '+(workRequestPage+1);$('workRequestPrevious').disabled=workRequestPage===0;$('workRequestNext').disabled=rows.length<=50;
  }catch(error){if(request===workRequestLoad&&ticket===generation&&uid===user?.id)$('workRequestStatus').textContent='Unable to load requests: '+error.message;}
 }
-let staffRequest=0,staffResetTarget=null,staffResetBusy=false;
+let staffRequest=0,staffResetTarget=null,staffResetBusy=false,countryAccessTarget=null,countryAccessBusy=false;
 function clearStaffUI(){
  staffRequest++;staffResetTarget=null;
+ countryAccessTarget=null;$('countryAccessDialog')?.close();
  $('staffRows')?.replaceChildren();
  const dialog=$('staffPasswordDialog');if(dialog?.open)dialog.close();
  $('staffPasswordForm')?.reset();
@@ -430,7 +431,37 @@ function clearStaffUI(){
 async function functionMessage(error,fallback){
  try{const body=await error.context?.json();return body?.error||error.message||fallback;}catch{return error.message||fallback;}
 }
+function staffCountrySelection(member){return (member.availableMarkets||[]).filter(name=>member.role==='staff'?(member.allowedMarkets||[]).includes(name.trim().toLowerCase()):!(member.deniedEntryMarkets||[]).includes(name.trim().toLowerCase()));}
+function drawCountryAccess(){
+ const target=countryAccessTarget,companyId=$('countryAccessCompany').value,member=target?.memberships.find(m=>m.companyId===companyId);
+ $('countryAccessOptions').replaceChildren();if(!member)return;
+ const chosen=new Set(staffCountrySelection(member));
+ $('countryAccessDescription').textContent=member.role==='staff'?'Choose the countries this staff member can access.':'Choose the countries where this person can enter rankings. Their existing viewing access stays the same.';
+ for(const name of member.availableMarkets||[]){const label=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.value=name;input.checked=chosen.has(name);label.style.cssText='display:flex;align-items:center;gap:10px;padding:8px 0';input.style.width='auto';label.append(input,document.createTextNode(name));$('countryAccessOptions').append(label);}
+ $('countryAccessSave').disabled=countryAccessBusy; $('countryAccessStatus').textContent=member.availableMarkets?.length?'':'No countries have been added to this company yet.';
+}
+function openCountryAccess(account){
+ if(!ready||!canManageStaff())return;
+ countryAccessTarget=account;const select=$('countryAccessCompany');select.replaceChildren();
+ for(const member of account.memberships.filter(m=>['staff','head_staff','co_admin'].includes(m.role))){const option=document.createElement('option');option.value=member.companyId;option.textContent=member.company;select.append(option);}
+ if(!select.options.length)return;
+ $('countryAccessUsername').textContent=account.username;drawCountryAccess();$('countryAccessDialog').showModal();
+}
+function setupCountryAccessUI(){
+ const dialog=document.createElement('dialog');dialog.id='countryAccessDialog';dialog.className='panel';dialog.style.cssText='width:min(520px,94vw);max-height:85vh;overflow:auto;color:var(--text);background:var(--card);border:1px solid var(--line);border-radius:14px';
+ dialog.innerHTML='<div class="sectiontitle"><h2>Country access</h2><button type="button" class="btn" id="countryAccessClose">Close</button></div><p id="countryAccessUsername"></p><form id="countryAccessForm"><label for="countryAccessCompany">Company</label><select id="countryAccessCompany"></select><p id="countryAccessDescription"></p><div id="countryAccessOptions"></div><p id="countryAccessStatus" role="status"></p><button type="submit" class="btn primary" id="countryAccessSave">Save access</button></form>';
+ document.body.append(dialog);$('countryAccessClose').onclick=()=>{if(!countryAccessBusy)dialog.close();};dialog.addEventListener('cancel',event=>{if(countryAccessBusy)event.preventDefault();});dialog.addEventListener('close',()=>{countryAccessTarget=null;});$('countryAccessCompany').onchange=drawCountryAccess;
+ $('countryAccessForm').onsubmit=async event=>{
+  event.preventDefault();if(countryAccessBusy||!ready||!user||!canManageStaff()||!countryAccessTarget)return;
+  const target=countryAccessTarget,companyId=$('countryAccessCompany').value,uid=user.id,ticket=generation,markets=[...$('countryAccessOptions').querySelectorAll('input:checked')].map(input=>input.value);
+  countryAccessBusy=true;$('countryAccessSave').disabled=true;$('countryAccessCompany').disabled=true;$('countryAccessClose').disabled=true;$('countryAccessStatus').textContent='Saving country access…';
+  try{const {data,error}=await db.functions.invoke('admin-list-users',{body:{action:'saveCountryAccess',targetUserId:target.id,companyId,markets}});if(error)throw Error(await functionMessage(error,'Could not save country access.'));if(!data?.ok)throw Error(data?.error||'Could not save country access.');if(uid!==user?.id||ticket!==generation||countryAccessTarget!==target)return;dialog.close();notify('Country access updated for '+target.username+'. They should refresh the page to see their new countries.');await renderStaffs();}
+  catch(error){if(uid===user?.id&&ticket===generation&&countryAccessTarget===target)$('countryAccessStatus').textContent=error.message;}
+  finally{countryAccessBusy=false;$('countryAccessSave').disabled=false;$('countryAccessCompany').disabled=false;$('countryAccessClose').disabled=false;}
+ };
+}
 function setupStaffUI(){
+ setupCountryAccessUI();
  const button=document.createElement('button');button.type='button';button.dataset.page='staffs';button.hidden=true;button.textContent='Staff info';document.querySelector('.nav').append(button);
  const page=document.createElement('section');page.id='staffs';page.className='page';page.innerHTML='<div class="panel"><div class="sectiontitle"><h3>Login accounts</h3><button type="button" class="btn" id="staffRefresh">Refresh</button></div><p id="staffStatus" role="status"></p><div class="tablewrap"><table><thead><tr><th>Username</th><th>Role / companies</th><th>Last sign-in (GST)</th><th>Action</th></tr></thead><tbody id="staffRows"></tbody></table></div></div>';
  document.querySelector('main').append(page);
@@ -463,7 +494,7 @@ async function renderStaffs(){
   for(const account of accounts){const tr=document.createElement('tr');tr.insertCell().textContent=account.username;
    tr.insertCell().textContent=(account.memberships||[]).map(m=>(roles[m.role]||m.role)+' · '+m.company).join('; ');
    tr.insertCell().textContent=account.lastSignIn?new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Dubai',dateStyle:'medium',timeStyle:'short'}).format(new Date(account.lastSignIn)):'Never signed in';
-   const button=document.createElement('button');button.type='button';button.className='btn sm';button.textContent='Change password';button.onclick=()=>{if(!ready||!user||!canManageStaff())return;staffResetTarget={id:account.id,username:account.username};$('staffPasswordForm').reset();$('staffPassword').type='password';$('staffPasswordShow').textContent='Show';$('staffPasswordShow').setAttribute('aria-pressed','false');$('staffPasswordUsername').textContent=account.username;$('staffPasswordStatus').textContent='';$('staffPasswordDialog').showModal();};tr.insertCell().append(button);$('staffRows').append(tr);
+   const button=document.createElement('button');button.type='button';button.className='btn sm';button.textContent='Change password';button.onclick=()=>{if(!ready||!user||!canManageStaff())return;staffResetTarget={id:account.id,username:account.username};$('staffPasswordForm').reset();$('staffPassword').type='password';$('staffPasswordShow').textContent='Show';$('staffPasswordShow').setAttribute('aria-pressed','false');$('staffPasswordUsername').textContent=account.username;$('staffPasswordStatus').textContent='';$('staffPasswordDialog').showModal();};const actions=tr.insertCell();actions.append(button);if(account.memberships.some(m=>['staff','head_staff','co_admin'].includes(m.role))){const access=document.createElement('button');access.type='button';access.className='btn sm';access.textContent='Country access';access.style.marginLeft='8px';access.onclick=()=>openCountryAccess(account);actions.append(access);}$('staffRows').append(tr);
   }
   $('staffStatus').textContent=accounts.length?accounts.length+' login accounts':'No login accounts found.';
  }catch(error){if(request===staffRequest&&ticket===generation&&uid===user?.id)$('staffStatus').textContent=error.message;}
