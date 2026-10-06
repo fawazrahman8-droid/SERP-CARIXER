@@ -156,3 +156,5 @@
 @keyframes welcome-arrow{0%,100%{transform:translate(-3px,3px);opacity:.65}50%{transform:translate(3px,-3px);opacity:1}}
 @media(prefers-reduced-motion:reduce){.welcome-halo::before,.welcome-halo::after{animation:none!important}}
 
+#loader.welcome-active{opacity:1!important;visibility:visible!important;display:flex!important;z-index:99999}
+
