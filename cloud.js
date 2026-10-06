@@ -143,7 +143,7 @@ async function welcomeUser(account,ticket){
 }
 async function openSession(session){
  if(!session){showCodeScreen(false);user=null;companies=[];memberships=[];clearPrivate();$('authScreen').hidden=false;$('authSignout').hidden=true;return;}
- const ticket=++generation;user=session.user;setBusy(true);notify('');setWorkspaceLoading(true);
+ const ticket=++generation;user=session.user;setBusy(true);notify('');
  try{const approval=check(await db.rpc('login_status'));if(ticket!==generation)return;
   if(!approval.approved){clearPrivate();companies=[];memberships=[];showCodeScreen(true);setWorkspaceLoading(false);$('loginCodeUser').textContent=session.user.app_metadata?.username||'Your account';await sendLoginCode();return;}
   showCodeScreen(false);
