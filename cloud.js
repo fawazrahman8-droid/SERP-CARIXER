@@ -5,6 +5,12 @@ let temporaryMarketNames=[];
 const pendingRankingSearches=new Map();
 let rankingAlertLoad=0,rankingAlertLatest=null;
 let loginChallenge=null,loginResendAt=0,loginCodeTimer=null,loginCheckPending=false;
+const rememberStorage={
+ getItem(key){const current=sessionStorage.getItem(key);if(current)return current;try{const saved=JSON.parse(localStorage.getItem('serp-remember:'+key)||'null');if(saved&&saved.expiresAt>Date.now()&&typeof saved.value==='string')return saved.value;localStorage.removeItem('serp-remember:'+key);}catch{}return null;},
+ setItem(key,value){sessionStorage.setItem(key,value);try{const saved=JSON.parse(localStorage.getItem('serp-remember:'+key)||'null');if(saved?.expiresAt>Date.now())localStorage.setItem('serp-remember:'+key,JSON.stringify({...saved,value}));else localStorage.removeItem('serp-remember:'+key);}catch{}},
+ removeItem(key){sessionStorage.removeItem(key);try{localStorage.removeItem('serp-remember:'+key);}catch{}},
+ remember(){for(let i=0;i<sessionStorage.length;i++){const key=sessionStorage.key(i);if(/^sb-.+-auth-token$/.test(key)){const value=sessionStorage.getItem(key);localStorage.setItem('serp-remember:'+key,JSON.stringify({value,expiresAt:Date.now()+7*24*60*60*1000}));}}}
+};
 function showCodeScreen(show){$('authForm').hidden=show;$('loginCodeForm').hidden=!show;$('authScreen').hidden=false;if(!show){loginChallenge=null;clearInterval(loginCodeTimer);$('loginCode').value='';}}
 async function codeRequest(action,extra={}){
  const {data,error}=await db.functions.invoke('login-email-code',{body:{action,...extra}});
@@ -548,6 +554,9 @@ async function renderRankingAlerts(){
  }catch(error){if(request===rankingAlertLoad&&uid===user?.id&&ticket===generation)$('rankingAlertsStatus').textContent='Could not load ranking alerts: '+error.message;}
 }
 function wireUI(){
+ const rememberLabel=document.createElement('label');rememberLabel.style.cssText='display:flex;gap:8px;align-items:center;margin:14px 0';rememberLabel.innerHTML='<input id="rememberLogin" type="checkbox" style="width:auto"> Remember me for 7 days';$('loginButton').insertAdjacentElement('beforebegin',rememberLabel);
+ try{$('rememberLogin').checked=sessionStorage.getItem('serp-remember-choice')==='true';}catch{}
+ $('rememberLogin').onchange=()=>{try{sessionStorage.setItem('serp-remember-choice',String($('rememberLogin').checked));}catch{}};
  setupAuditUI();
  setupStaffUI();
  setInterval(()=>{if(user&&ready&&canManageStaff())void renderRankingAlerts();},45000);
@@ -570,15 +579,16 @@ function wireUI(){
  $('authForm').onsubmit=async e=>{e.preventDefault();if(busy)return;setBusy(true);authMessage(recovery?'Updating password…':'Signing in…');try{if(recovery){check(await db.auth.updateUser({password:$('password').value}));recovery=false;$('loginButton').textContent='Sign in';authMessage('Password updated.');await openSession(check(await db.auth.getSession()).session);}else{const data=check(await db.auth.signInWithPassword({email:usernameEmail($('email').value),password:$('password').value}));$('password').value='';await openSession(data.session);}}catch(e){authMessage(e.message);}finally{setBusy(false);}};
  $('resetButton').onclick=()=>authMessage('Contact your administrator to reset your username account password.');
  $('authSignout').onclick=logout;
- $('loginCodeForm').onsubmit=async e=>{e.preventDefault();if(busy||!loginChallenge)return;setBusy(true);$('verifyLoginCode').disabled=true;$('loginCodeMessage').textContent='Checking code…';try{await codeRequest('verify',{challengeId:loginChallenge,code:$('loginCode').value.trim()});await openSession(check(await db.auth.getSession()).session);}catch(e){$('loginCodeMessage').textContent=e.message;}finally{setBusy(false);$('verifyLoginCode').disabled=!loginChallenge;refreshCodeResend();}};
+ $('loginCodeForm').onsubmit=async e=>{e.preventDefault();if(busy||!loginChallenge)return;setBusy(true);$('verifyLoginCode').disabled=true;$('loginCodeMessage').textContent='Checking code…';try{await codeRequest('verify',{challengeId:loginChallenge,code:$('loginCode').value.trim(),remember:$('rememberLogin').checked});if($('rememberLogin').checked)rememberStorage.remember();await openSession(check(await db.auth.getSession()).session);}catch(e){$('loginCodeMessage').textContent=e.message;}finally{setBusy(false);$('verifyLoginCode').disabled=!loginChallenge;refreshCodeResend();}};
  $('resendLoginCode').onclick=async()=>{if(busy||Date.now()<loginResendAt)return;setBusy(true);try{await sendLoginCode();}finally{setBusy(false);refreshCodeResend();}};
  $('cancelLoginCode').onclick=logout;
 }
-async function boot(){wireUI();$('loader').classList.add('hide');try{if(!window.supabase)throw Error('The website libraries failed to load. Reload to retry.');db=supabase.createClient(SERP_CONFIG.url,SERP_CONFIG.publishableKey,{auth:{persistSession:true,storage:sessionStorage,autoRefreshToken:true,detectSessionInUrl:true},global:{fetch:async(input,options={})=>fetch(input,{...options,signal:options.signal||AbortSignal.timeout(30000)})}});
+async function boot(){wireUI();$('loader').classList.add('hide');try{if(!window.supabase)throw Error('The website libraries failed to load. Reload to retry.');db=supabase.createClient(SERP_CONFIG.url,SERP_CONFIG.publishableKey,{auth:{persistSession:true,storage:rememberStorage,autoRefreshToken:true,detectSessionInUrl:true},global:{fetch:async(input,options={})=>fetch(input,{...options,signal:options.signal||AbortSignal.timeout(30000)})}});
  db.auth.onAuthStateChange((event,session)=>{if(event==='SIGNED_OUT'&&$('loader').classList.contains('signout-active'))return;if(event==='SIGNED_OUT'){showCodeScreen(false);user=null;$('authSignout').hidden=true;clearPrivate();$('authScreen').hidden=false;}if(event==='PASSWORD_RECOVERY'){showCodeScreen(false);recovery=true;clearPrivate();user=session.user;$('authScreen').hidden=false;$('email').value=session.user.app_metadata?.username||session.user.email.split('@')[0];$('password').value='';$('password').autocomplete='new-password';$('loginButton').textContent='Set new password';authMessage('Enter a new password to finish account setup or recovery.');}});
  const data=check(await db.auth.getSession());if(!recovery)await openSession(data.session);
  setInterval(async()=>{if(!ready||!user||busy||loginCheckPending)return;loginCheckPending=true;try{const status=check(await db.rpc('login_status'));if(!status.approved){clearPrivate();companies=[];memberships=[];await openSession(check(await db.auth.getSession()).session);}}catch{clearPrivate();authMessage('Your session could not be checked. Sign in again.');$('authScreen').hidden=false;}finally{loginCheckPending=false;}},30000);
  document.modelContext?.registerTool({name:'read_serp_workspace_summary',description:'Read counts for the signed-in, currently selected SERP company.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true,untrustedContentHint:true},execute(input){if(Object.keys(input||{}).length||!ready||!user)throw Error('A loaded authenticated workspace and empty input are required.');return {company:companyLabel(),markets:state.markets.length,keywords:state.keywords.length,rankings:state.rows.length};}});
  }catch(e){authMessage(e.message);}}
 boot();
+
 
