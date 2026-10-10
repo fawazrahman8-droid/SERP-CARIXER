@@ -34,7 +34,7 @@
 .brand-slide{flex:0 0 100%;width:100%;min-width:0;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:120px 48px 145px;overflow:hidden;background:radial-gradient(ellipse at 85% 15%,var(--glow),transparent 55%),linear-gradient(140deg,var(--base),var(--deep))}
 .brand-slide.carixer{--base:#174573;--deep:#071526;--glow:#347cb97a;--accent:#8ecaff}
 .brand-slide.ecowide{--base:#225846;--deep:#071e19;--glow:#6eae617a;--accent:#b3e69c}
-.brand-slide.deliboo{--base:#693746;--deep:#231322;--glow:#d17c687a;--accent:#ffcaad}
+.brand-slide.delibo{--base:#693746;--deep:#231322;--glow:#d17c687a;--accent:#ffcaad}
 .brand-slide.trolley{--base:#23505c;--deep:#091c27;--glow:#499ea37a;--accent:#a2eced}
 .brand-contours{position:absolute;inset:-15%;width:130%;height:130%;opacity:.15;transform:rotate(-20deg);pointer-events:none}
 .brand-slide::after{content:'';position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(0deg,#fff01 0,#fff01 1px,transparent 1px,transparent 4px)}
@@ -43,7 +43,7 @@
 .poster-top i{width:6px;height:6px;background:var(--accent);border-radius:50%;box-shadow:0 0 12px var(--accent)}
 .brand-icon{width:78px;height:78px;color:var(--accent);margin-bottom:25px;filter:drop-shadow(0 6px 12px #0002)}
 .brand-name{font-size:clamp(35px,4.1vw,66px);font-weight:800;letter-spacing:-2px;margin:0;color:white;line-height:1.05;text-align:center}
-.ecowide .brand-name{font-weight:500;letter-spacing:3px}.deliboo .brand-name{letter-spacing:-2.5px}.trolley .brand-name{font-size:clamp(28px,3.4vw,48px);letter-spacing:-1px}
+.ecowide .brand-name{font-weight:500;letter-spacing:3px}.delibo .brand-name{letter-spacing:-2.5px}.trolley .brand-name{font-size:clamp(28px,3.4vw,48px);letter-spacing:-1px}
 .brand-domain{margin:19px 0 0;font-size:11px;letter-spacing:2px;color:#ffffff85}
 .poster-rule{width:38px;height:2px;background:var(--accent);margin:27px 0 0;border-radius:1px}
 .showcase-caption{z-index:1;position:relative;margin-top:30px;text-align:center;max-width:350px}
