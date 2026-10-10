@@ -21,6 +21,7 @@ const WeeklyBackup=(()=>{
  function syncHistoryAccess(){
   const allowed=!!user&&ready&&scope().length>0;
   const button=document.getElementById('backupHistoryButton');if(button)button.hidden=!allowed;
+  const clear=document.getElementById('clearBackupHistory');if(clear)clear.hidden=!memberships.some(m=>['owner','co_admin'].includes(m.role));
   const dialog=document.getElementById('backupHistoryDialog');if(!allowed&&dialog?.open)dialog.close();
  }
 
@@ -30,7 +31,8 @@ const WeeklyBackup=(()=>{
   if(slot>now)slot-=WEEK;
   return slot;
  }
- function scope(){return companies.filter(c=>memberships.some(m=>m.company_id===c.id&&['owner','co_admin'].includes(m.role))).sort((a,b)=>a.id.localeCompare(b.id));}
+ function backupRole(member){return ['owner','co_admin'].includes(member.role)||(member.role==='head_staff'&&user?.app_metadata?.backup_history_access===true);}
+ function scope(){return companies.filter(c=>memberships.some(m=>m.company_id===c.id&&backupRole(m))).sort((a,b)=>a.id.localeCompare(b.id));}
  function nextDueTime(){
   const slot=latestSlot();let firstDue=slot+WEEK;
   try{const saved=JSON.parse(localStorage.getItem(KEY+':'+scope().map(c=>c.id).join(','))||'null');if(saved?.firstDue)firstDue=saved.firstDue;}catch{}
@@ -102,7 +104,7 @@ const WeeklyBackup=(()=>{
     // Recheck current server membership before exporting, in addition to table RLS.
     attemptSlot=due?slot:null;attempt=log('Preparing',attemptSlot,manual?'Manual backup':Date.now()-slot>60000?'Late run: exporting current data after a missed schedule.':'Scheduled backup');
     const fresh=check(await db.from('company_members').select('company_id,role').eq('user_id',uid));
-    if(cs.some(c=>!fresh.some(m=>m.company_id===c.id&&['owner','co_admin'].includes(m.role))))throw Error('Backup access changed. Sign in again.');
+    if(cs.some(c=>!fresh.some(m=>m.company_id===c.id&&backupRole(m))))throw Error('Backup access changed. Sign in again.');
     const {X,wb}=await build(cs,slot,valid);
     if(!valid())throw Error('Session changed. No download created.');
     const stamp=new Date().toISOString().replace(/[:.]/g,'-');
@@ -131,7 +133,7 @@ const WeeklyBackup=(()=>{
    window.addEventListener('storage',syncHistoryAccess);
   }else document.getElementById('import').append(panel);
   const download=document.getElementById('backupDownload');if(download)download.onclick=()=>checkDue(true);
-  const clearHistory=document.getElementById('clearBackupHistory');if(clearHistory)clearHistory.onclick=()=>{if(!user||!ready||!scope().length)return;localStorage.removeItem(historyKey());renderHistory();};
+  const clearHistory=document.getElementById('clearBackupHistory');if(clearHistory)clearHistory.onclick=()=>{if(!user||!ready||!scope().length||!memberships.some(m=>['owner','co_admin'].includes(m.role)))return;localStorage.removeItem(historyKey());renderHistory();};
   renderHistory();
   setInterval(()=>checkDue(),30000);
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkDue();});
