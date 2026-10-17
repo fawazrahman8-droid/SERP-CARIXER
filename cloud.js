@@ -258,7 +258,26 @@ async function removeExcelUpload(upload,company,ticket){
  let count=0;await mutate(async()=>{count=check(await db.rpc('remove_excel_import',{p_import:upload.id}));},'Excel import removed');
  if(company===activeAccount&&ticket<generation)void renderImportInfo();
 }
+function downloadDailyRankingsPDF(){
+ if(!ready||!user||!canWrite())return notify('Only admins can download this report.');
+ const month=$('rankMonth').value,country=$('rankCountry').value,date=$('rankDate').value,q=$('rankSearch').value.toLowerCase();
+ const rs=filtered({month,country,date}),dates=date?[date]:[...new Set(rs.map(r=>r.date))].sort(),pairs=new Map(),positions=new Map();
+ for(const k of state.keywords)if((country==='ALL'||k.market===country)&&k.name.toLowerCase().includes(q))pairs.set(JSON.stringify([k.name,k.market]),{name:k.name,market:k.market});
+ for(const r of rs){if(r.keyword.toLowerCase().includes(q))pairs.set(JSON.stringify([r.keyword,r.country]),{name:r.keyword,market:r.country});positions.set(JSON.stringify([r.keyword,r.country,r.date]),r.position);}
+ if(!dates.length||!pairs.size)return notify('No daily rankings match these filters.');
+ try{
+ const doc=new window.jspdf.jsPDF('l','mm','a4'),body=[];
+ for(const d of dates)for(const k of pairs.values()){const key=JSON.stringify([k.name,k.market,d]);body.push([d,k.name,k.market,positions.has(key)?displayPosition(positions.get(key),d):'No entry']);}
+ doc.setFontSize(18);doc.text('Daily Rankings Report',14,16);doc.setFontSize(10);
+ doc.text(companyLabel(),14,24);doc.text('Period: '+(date||month)+' | Country: '+(country==='ALL'?'All countries':country),14,31);
+ if(q)doc.text('Keyword filter: '+q,14,38);
+ doc.autoTable({startY:q?44:38,head:[['Date','Keyword','Country / Market','Position']],body,styles:{fontSize:8,cellPadding:2.5},columnStyles:{1:{cellWidth:140}},headStyles:{fillColor:[15,23,42]},margin:{left:14,right:14},didDrawPage:()=>{doc.setFontSize(8);doc.text('Page '+doc.internal.getNumberOfPages(),270,202);}});
+ doc.save('SERP-Daily-Rankings-'+(activeCompany().domain||'company').replace(/[^a-z0-9.-]/gi,'-')+'-'+(date||month)+'.pdf');notify('Daily rankings PDF downloaded.');
+ }catch(e){notify('PDF could not be created: '+e.message);}
+}
 function renderRankings(){
+ let pdfButton=$('dailyRankingsPDF');if(!pdfButton){pdfButton=document.createElement('button');pdfButton.id='dailyRankingsPDF';pdfButton.className='btn primary';pdfButton.type='button';pdfButton.textContent='Download PDF';pdfButton.onclick=downloadDailyRankingsPDF;$('rankings').prepend(pdfButton);}pdfButton.hidden=!ready||!user||!canWrite();
+
  const rs=filtered({month:$('rankMonth').value,country:$('rankCountry').value,date:$('rankDate').value});
  const selectedDate=$('rankDate').value,dates=selectedDate?[selectedDate]:[...new Set(rs.map(r=>r.date))].sort(),q=$('rankSearch').value.toLowerCase(),country=$('rankCountry').value,pairs=new Map(),positions=new Map();
  for(const k of state.keywords){if((country==='ALL'||k.market===country)&&k.name.toLowerCase().includes(q))pairs.set(JSON.stringify([k.name,k.market]),{name:k.name,market:k.market});}
