@@ -204,7 +204,7 @@ async function saveManualEntry(){
  const position=raw===''?null:Number(raw);
  if(!date||!market||!keyword)return notify('Select date, country and keyword.');
  if((memberships.find(m=>m.company_id===activeAccount)?.denied_entry_market_names||[]).includes(market.name.trim().toLowerCase())&&!temporaryMarketNames.includes(market.name.trim().toLowerCase()))return notify('Ranking entry for this market is assigned to another user.');
- if(position!==null&&(!Number.isInteger(position)||position<1||position>1000))return notify('Position must be a whole number from 1 to 1000, or blank for Not Ranked.');
+ if(position!==null&&(!Number.isInteger(position)||position<1||position>100))return notify('Position must be a whole number from 1 to 100, or blank for Not Ranked.');
  const k=keywordRecords.find(k=>k.keyword===keyword&&(k.market_id===market.id||k.market_id===null));if(!k)return notify('This keyword is not assigned to the selected market.');
  if(isEntryLimited()&&date!==dubaiToday())return notify('You can only add rankings for today in Dubai time.');
  if(isEntryLimited()&&state.rows.some(r=>r.keyword_id===k.id&&r.market_id===market.id&&r.date===date))return notify('Already entered for today. Only an admin can change this ranking.');
