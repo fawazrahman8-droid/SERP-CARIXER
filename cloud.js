@@ -276,7 +276,15 @@ function downloadDailyRankingsPDF(){
  }catch(e){notify('PDF could not be created: '+e.message);}
 }
 function renderRankings(){
- let pdfButton=$('dailyRankingsPDF');if(!pdfButton){pdfButton=document.createElement('button');pdfButton.id='dailyRankingsPDF';pdfButton.className='btn primary';pdfButton.type='button';pdfButton.textContent='Download PDF';pdfButton.onclick=downloadDailyRankingsPDF;$('rankings').prepend(pdfButton);}pdfButton.hidden=!ready||!user||!canWrite();
+ let pdfButton=$('dailyRankingsPDF');
+ if(!pdfButton){
+  const toolbar=document.createElement('div');toolbar.className='daily-report-toolbar';toolbar.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:22px;padding-bottom:18px;border-bottom:1px solid var(--line)';
+  const title=document.createElement('h3');title.textContent='Daily rankings';title.style.cssText='margin:0;font-size:16px;font-weight:650';
+  pdfButton=document.createElement('button');pdfButton.id='dailyRankingsPDF';pdfButton.className='btn';pdfButton.type='button';pdfButton.style.cssText='display:inline-flex;align-items:center;justify-content:center;gap:9px;min-height:40px;padding:9px 16px;margin:0;border-radius:9px;white-space:nowrap;font-weight:600';
+  const icon=document.createElementNS('http://www.w3.org/2000/svg','svg');icon.setAttribute('viewBox','0 0 24 24');icon.setAttribute('width','17');icon.setAttribute('height','17');icon.setAttribute('fill','none');icon.setAttribute('stroke','currentColor');icon.setAttribute('stroke-width','1.8');icon.setAttribute('stroke-linecap','round');icon.setAttribute('stroke-linejoin','round');icon.setAttribute('aria-hidden','true');const path=document.createElementNS('http://www.w3.org/2000/svg','path');path.setAttribute('d','M12 3v12m-4-4 4 4 4-4M5 16v4h14v-4');icon.append(path);
+  pdfButton.append(icon,document.createTextNode('Export PDF'));pdfButton.title='Download daily rankings using the selected filters';pdfButton.onclick=downloadDailyRankingsPDF;toolbar.append(title,pdfButton);$('rankings').querySelector('.panel').prepend(toolbar);
+ }
+ pdfButton.hidden=!ready||!user||!canWrite();pdfButton.style.display=pdfButton.hidden?'none':'inline-flex';
 
  const rs=filtered({month:$('rankMonth').value,country:$('rankCountry').value,date:$('rankDate').value});
  const selectedDate=$('rankDate').value,dates=selectedDate?[selectedDate]:[...new Set(rs.map(r=>r.date))].sort(),q=$('rankSearch').value.toLowerCase(),country=$('rankCountry').value,pairs=new Map(),positions=new Map();
