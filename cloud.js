@@ -36,6 +36,7 @@ function SafeChart(canvas,config){if(!window.Chart)return {destroy(){}};config.o
 function activeCompany(){return companies.find(c=>c.id===activeAccount);}
 function companyLabel(){const c=activeCompany();return c?`${c.domain} — ${c.name}`:'';}
 function notify(message){$('notice').textContent=message;$('notice').hidden=!message;}
+function canAddCatalog(){return memberships.some(m=>m.company_id===activeAccount&&['owner','editor','staff','head_staff'].includes(m.role));}
 function canWrite(){return memberships.some(m=>m.company_id===activeAccount&&['owner','editor'].includes(m.role));}
 function canAudit(){return memberships.some(m=>m.role==='auditor');}
 function canManageStaff(){return !canAudit()&&memberships.some(m=>['owner','editor'].includes(m.role));}
@@ -71,6 +72,7 @@ function applyRoleUI(){
  $('entryDate').min=limited?dubaiToday():'';$('entryDate').max=limited?dubaiToday():'';
  if(limited)$('entryDate').value=dubaiToday();
  document.querySelectorAll('#entry button').forEach(el=>el.disabled=!(canWrite()||limited));
+ document.querySelectorAll('[data-action="addMarket"],[data-action="addKeyword"]').forEach(el=>el.disabled=!canAddCatalog());
  document.querySelectorAll('#entry .danger-text').forEach(el=>el.hidden=limited);
  if(document.querySelector('.page.active')?.id==='entry')renderEntry();
  clearTimeout(dateAccessTimer);
@@ -178,16 +180,16 @@ async function logout(){
  loader.classList.remove('signout-active');loader.dataset.workspaceLoader='';setWorkspaceLoading(false);setBusy(false);$('authScreen').hidden=false;authMessage(error?'Workspace cleared. Sign-out failed: '+error.message+' Close this tab to discard its session.':'Signed out.');
 }
 
-async function mutate(action,message,allowTodayInsert=false){
- if(busy)return;if(!ready||!user||!(canWrite()||(allowTodayInsert&&isEntryLimited()))){notify('An owner or editor membership is required.');return;}
+async function mutate(action,message,allowTodayInsert=false,allowCatalog=false){
+ if(busy)return;if(!ready||!user||!(canWrite()||(allowTodayInsert&&isEntryLimited())||(allowCatalog&&canAddCatalog()))){notify('An owner or editor membership is required.');return;}
  const id=activeAccount,ticket=generation;let saved=false;setBusy(true);notify('Saving…');
  try{await action(id);saved=true;if(ticket!==generation||id!==activeAccount||!user)return;await loadCompany(id);notify('');toast(message);}
  catch(e){if(user&&activeAccount===id){if(!saved){try{await loadCompany(id);}catch{ready=false;}}else ready=false;if(!ready){document.querySelector('.app').hidden=true;$('authScreen').hidden=false;authMessage((saved?'Your data was saved, but the page could not refresh. ':'The operation could not finish. ')+e.message+' Sign in again to reload.');}notify((saved?'Saved, but refresh failed: ':'Save did not finish: ')+e.message);}}
  finally{setBusy(false);}
 }
 function marketByName(name){return marketRecords.find(m=>m.name===name);}
-async function addMarket(){const name=$('newMarket').value.trim();if(!name)return notify('Enter a market name.');if(marketRecords.some(m=>m.name.toLowerCase()===name.toLowerCase()))return notify('This market already exists.');await mutate(async id=>{check(await db.from('markets').insert({company_id:id,name}).select().single());$('newMarket').value='';},'Market saved');}
-async function addKeyword(){const keyword=$('newKeyword').value.trim(),market=marketByName($('keywordMarket').value);if(!market||!keyword)return notify('Select a market and enter a keyword.');if(keywordRecords.some(k=>k.market_id===market.id&&k.keyword.toLowerCase()===keyword.toLowerCase()))return notify('Keyword already exists for this market.');await mutate(async id=>{check(await db.from('keywords').insert({company_id:id,market_id:market.id,keyword}).select().single());$('newKeyword').value='';},'Keyword saved');}
+async function addMarket(){const name=$('newMarket').value.trim();if(!name)return notify('Enter a market name.');if(marketRecords.some(m=>m.name.toLowerCase()===name.toLowerCase()))return notify('This market already exists.');await mutate(async id=>{check(await db.rpc('create_staff_market',{p_company:id,p_name:name}));$('newMarket').value='';},'Market saved',false,true);}
+async function addKeyword(){const keyword=$('newKeyword').value.trim(),market=marketByName($('keywordMarket').value);if(!market||!keyword)return notify('Select a market and enter a keyword.');if(keywordRecords.some(k=>k.market_id===market.id&&k.keyword.toLowerCase()===keyword.toLowerCase()))return notify('Keyword already exists for this market.');await mutate(async id=>{check(await db.from('keywords').insert({company_id:id,market_id:market.id,keyword}).select().single());$('newKeyword').value='';},'Keyword saved',false,true);}
 async function deleteRecord(table,id){
  if(table==='markets'){
   const keywordCount=keywordRecords.filter(k=>k.market_id===id).length;
