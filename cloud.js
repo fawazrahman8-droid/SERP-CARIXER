@@ -265,7 +265,7 @@ function renderRankings(){
  for(const r of rs){if(r.keyword.toLowerCase().includes(q))pairs.set(JSON.stringify([r.keyword,r.country]),{name:r.keyword,market:r.country});positions.set(JSON.stringify([r.keyword,r.country,r.date]),r.position);}
  const datePage=pageSlice('rankingDates',dates,31,'rankHead',renderRankings),rowPage=pageSlice('rankings',[...pairs.values()],50,'rankBody',renderRankings);
  $('rankHead').innerHTML='<tr><th>Keyword</th><th>Market</th>'+datePage.items.map(d=>'<th>'+esc(d)+'</th>').join('')+'</tr>';
- $('rankBody').innerHTML=rowPage.items.map(k=>'<tr><td>'+esc(k.name)+'</td><td>'+esc(k.market)+'</td>'+datePage.items.map(d=>{const key=JSON.stringify([k.name,k.market,d]);return '<td>'+ (positions.has(key)?displayPosition(positions.get(key),d):'Not Ranked')+'</td>';}).join('')+'</tr>').join('');
+ $('rankBody').innerHTML=rowPage.items.map(k=>'<tr><td>'+esc(k.name)+'</td><td>'+esc(k.market)+'</td>'+datePage.items.map(d=>{const key=JSON.stringify([k.name,k.market,d]);return '<td>'+ (positions.has(key)?displayPosition(positions.get(key),d):'No entry')+'</td>';}).join('')+'</tr>').join('');
 }
 function renderHistory(){
  const rs=filtered({keyword:$('histKeyword').value,country:$('histCountry').value}).filter(r=>(!$('histFrom').value||r.date>=$('histFrom').value)&&(!$('histTo').value||r.date<=$('histTo').value)).sort((a,b)=>a.date.localeCompare(b.date));
@@ -281,7 +281,7 @@ function parseDate(value){
 }
 function validDate(y,m,d){const dt=new Date(Date.UTC(y,m-1,d));return dt.getUTCFullYear()===y&&dt.getUTCMonth()===m-1&&dt.getUTCDate()===d?dt.toISOString().slice(0,10):null;}
 function parsePosition(value){if(value===null||value===undefined||String(value).trim()==='')return null;const s=String(value).trim().toLowerCase();if(['na','n/a','-','—','new','not found','not ranked'].includes(s))return null;if(s==='>100')return 101;const n=Number(s);if(!Number.isInteger(n)||n<1||n>1000)throw Error('Invalid ranking position: '+String(value).slice(0,40));return n;}
-function displayPosition(position,date){if(date&&new Date(date+'T00:00:00Z').getUTCDay()===0)return 'Weekend';return position===null?'No entry':fmtPos(position);}
+function displayPosition(position,date){return position===null?'Not Ranked':position===undefined?'No entry':fmtPos(position);}
 function marketFromKeyword(sheet,keyword){
  const m=String(keyword).match(/\bin\s+(uae|saudi(?: arabia)?|india|oman|kuwait|jordan|bahrain|azerbaijan|us|usa|dubai)\b/i);
  if(m){const k=m[1].toLowerCase();return ({uae:'UAE',saudi:'Saudi Arabia','saudi arabia':'Saudi Arabia',india:'India',oman:'Oman',kuwait:'Kuwait',jordan:'Jordan',bahrain:'Bahrain',azerbaijan:'Azerbaijan',us:'United States',usa:'United States',dubai:'Dubai'})[k]||m[1];}
