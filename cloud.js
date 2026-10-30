@@ -400,7 +400,11 @@ function setupManualSearch(){
   const pending=db.rpc('record_ranking_search',{p_company:company,p_keyword:k.id,p_market:market.id,p_date:date}).then(result=>{if(result.error)throw result.error;return {};}).catch(error=>{if(company===activeAccount&&ticket===generation&&uid===user?.id)notify('Could not record Search: '+error.message);return {error};});
   pendingRankingSearches.set(searchUsageKey(company,k.id,market.id,date),pending);
  };
- save.insertAdjacentElement('beforebegin',button);
+ const actions=document.createElement('div');
+ actions.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:16px;width:100%;';
+ save.insertAdjacentElement('beforebegin',actions);
+ button.style.marginRight='0';
+ actions.append(button,save);
 }
 let workRequestPage=0,workRequestLoad=0,workRequestBusy=false;
 function clearWorkRequestsUI(){
