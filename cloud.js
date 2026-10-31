@@ -180,10 +180,10 @@ async function logout(){
  loader.classList.remove('signout-active');loader.dataset.workspaceLoader='';setWorkspaceLoading(false);setBusy(false);$('authScreen').hidden=false;authMessage(error?'Workspace cleared. Sign-out failed: '+error.message+' Close this tab to discard its session.':'Signed out.');
 }
 
-async function mutate(action,message,allowTodayInsert=false,allowCatalog=false){
+async function mutate(action,message,allowTodayInsert=false,allowCatalog=false,refreshSaved=null){
  if(busy)return;if(!ready||!user||!(canWrite()||(allowTodayInsert&&isEntryLimited())||(allowCatalog&&canAddCatalog()))){notify('An owner or editor membership is required.');return;}
  const id=activeAccount,ticket=generation;let saved=false;setBusy(true);notify('Saving…');
- try{await action(id);saved=true;if(ticket!==generation||id!==activeAccount||!user)return;await loadCompany(id);notify('');toast(message);}
+ try{const result=await action(id);saved=true;if(ticket!==generation||id!==activeAccount||!user)return;if(refreshSaved)await refreshSaved(result);else await loadCompany(id);notify('');toast(message);}
  catch(e){if(user&&activeAccount===id){if(!saved){try{await loadCompany(id);}catch{ready=false;}}else ready=false;if(!ready){document.querySelector('.app').hidden=true;$('authScreen').hidden=false;authMessage((saved?'Your data was saved, but the page could not refresh. ':'The operation could not finish. ')+e.message+' Sign in again to reload.');}notify((saved?'Saved, but refresh failed: ':'Save did not finish: ')+e.message);}}
  finally{setBusy(false);}
 }
@@ -212,7 +212,12 @@ async function saveManualEntry(){
  if(searched?.error)toast('Search could not be recorded. Saving will notify an admin.','warning');
  await mutate(async id=>{const record={company_id:id,market_id:market.id,keyword_id:k.id,ranking_date:date,position,source:'manual'};
  const query=isEntryLimited()?db.from('rankings').insert(record):db.from('rankings').upsert(record,{onConflict:'keyword_id,market_id,ranking_date'});
- const result=await query.select().single();if(result.error?.code==='23505')throw Error('Already entered for today. Only an admin can change this ranking.');check(result);$('entryPosition').value='';},'Ranking saved',true);
+ const result=await query.select().single();if(result.error?.code==='23505')throw Error('Already entered for today. Only an admin can change this ranking.');const saved=check(result);$('entryPosition').value='';return saved;},'Ranking saved',true,false,saved=>{
+  const row={id:saved.id,market_id:saved.market_id,keyword_id:saved.keyword_id,date:saved.ranking_date,month:saved.ranking_date.slice(0,7),country:market.name,keyword:k.keyword,position:saved.position,source:saved.source};
+  const index=state.rows.findIndex(r=>r.id===row.id||(r.keyword_id===row.keyword_id&&r.market_id===row.market_id&&r.date===row.date));
+  if(index<0)state.rows.push(row);else state.rows[index]=row;
+  rebuildFilters();void renderRankingAlerts();
+ });
 }
 function deleteButton(table,id){const b=document.createElement('button');b.className='btn sm danger-text';b.textContent='Delete';b.disabled=!canWrite();b.hidden=isEntryLimited();b.onclick=()=>deleteRecord(table,id);return b;}
 function renderKeywords(){const el=$('keywordList');el.replaceChildren();$('keywordCountPill').textContent=state.keywords.length+' keywords';for(const k of pageSlice('keywords',state.keywords,100,'keywordList',renderKeywords).items){const row=document.createElement('div');row.className='keyword-row';const text=document.createElement('span');text.textContent=k.name+' · '+(k.market||'Unassigned');row.append(text,deleteButton('keywords',k.id));el.append(row);}if(!el.children.length)el.textContent='No keywords yet.';}
