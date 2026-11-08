@@ -95,6 +95,7 @@ function setWorkspaceLoading(value){
 function check(result){if(result.error)throw result.error;return result.data;}
 function setBusy(value){busy=value;document.body.classList.toggle('busy',value);$('accountSelect').disabled=value;$('loginButton').disabled=value;}
 function clearRenderedPages(){cancelDonutEntrance();
+ if($('activityStaff')){$('activityStaff').innerHTML='<option value="">All staff</option>';delete $('activityStaff').dataset.scope;$('activityStaff').disabled=false;}
  pageOffsets.clear();
  for(const chart of [monthChart,historyChart,reportChart,rankDonut])chart?.destroy();
  monthChart=historyChart=reportChart=rankDonut=null;
@@ -644,7 +645,7 @@ function dateRangeFor(page=document.querySelector('.page.active')?.id){
 function setupReportingFeatures(){
  const nav=document.createElement('button');nav.dataset.page='activity';nav.textContent='Staff activity';nav.hidden=true;document.querySelector('.nav').append(nav);
  const page=document.createElement('section');page.id='activity';page.className='page';
- page.innerHTML='<div class="panel"><h3>Staff activity</h3><p class="hint">Recorded searches and saved changes. Search clicks do not prove a ranking was completed. Times: Dubai (UTC+4).</p><div class="filters"><div><label for="activityStaff">Staff username</label><input id="activityStaff" placeholder="Vismaya, Farhan, or any username"></div><div><label for="activityAction">Activity</label><select id="activityAction"><option value="">All activity</option><option>Searched</option><option>Saved</option><option>Updated</option><option>Deleted</option></select></div></div><button id="activityRefresh" class="btn">Refresh activity</button><p id="activityStatus" role="status"></p><div class="tablewrap"><table><thead><tr><th>Time (Dubai)</th><th>Staff</th><th>Activity</th><th>Keyword</th><th>Country</th><th>Ranking date</th><th>Position</th></tr></thead><tbody id="activityRows"></tbody></table></div><div class="pagination activity-pagination"><button class="btn" id="activityPrevious">Previous</button><span id="activityPage"></span><button class="btn" id="activityNext">Next</button></div></div>';
+ page.innerHTML='<div class="panel"><h3>Staff activity</h3><p class="hint">Recorded searches and saved changes. Search clicks do not prove a ranking was completed. Times: Dubai (UTC+4).</p><div class="filters"><div><label for="activityStaff">Staff</label><select id="activityStaff"><option value="">All staff</option></select></div><div><label for="activityAction">Activity</label><select id="activityAction"><option value="">All activity</option><option>Searched</option><option>Saved</option><option>Updated</option><option>Deleted</option></select></div></div><button id="activityRefresh" class="btn">Refresh activity</button><p id="activityStatus" role="status"></p><div class="tablewrap"><table><thead><tr><th>Time (Dubai)</th><th>Staff</th><th>Activity</th><th>Keyword</th><th>Country</th><th>Ranking date</th><th>Position</th></tr></thead><tbody id="activityRows"></tbody></table></div><div class="pagination activity-pagination"><button class="btn" id="activityPrevious">Previous</button><span id="activityPage"></span><button class="btn" id="activityNext">Next</button></div></div>';
  document.querySelector('main').append(page);
  for(const key of ['dashboard','rankings','reports','activity','audit']){
   const controls=document.createElement('div');controls.className='filters';controls.style.cssText='align-items:end;padding:14px 0;';
@@ -666,7 +667,7 @@ function setupReportingFeatures(){
  $('reports').prepend(reportControls);
  for(const id of ['reportComparison','reportMovement'])$(id).onchange=()=>{pageOffsets.delete('report');renderReport();};
  for(const id of ['activityStaff','activityAction'])$(id).onchange=()=>{staffActivityPage=0;void renderStaffActivity();};
- $('activityRefresh').onclick=()=>{staffActivityPage=0;void renderStaffActivity();};
+ $('activityRefresh').onclick=()=>{delete $('activityStaff').dataset.scope;staffActivityPage=0;void renderStaffActivity();};
  $('activityPrevious').onclick=()=>{staffActivityPage=Math.max(0,staffActivityPage-1);void renderStaffActivity();};
  $('activityNext').onclick=()=>{staffActivityPage++;void renderStaffActivity();};
  document.addEventListener('change',event=>{
@@ -681,12 +682,23 @@ async function renderStaffActivity(){
  $('activityStatus').textContent='Loading staff activity…';
  $('activityPrevious').disabled=$('activityNext').disabled=true;
  try{
+ const staffSelect=$('activityStaff'),scope=company+':'+ticket+':'+user.id;
+ if(staffSelect.dataset.scope!==scope){
+  staffSelect.disabled=true;
+  const {data,error}=await db.functions.invoke('admin-list-users',{body:{}});
+  if(request!==staffActivityRequest||ticket!==generation||company!==activeAccount||!ready||!canWrite())return;
+  if(error)throw Error(await functionMessage(error,'Unable to load staff.'));
+  if(!data?.ok)throw Error(data?.error||'Unable to load staff.');
+  const names=[...new Set((data.accounts||[]).filter(a=>(a.memberships||[]).some(m=>m.companyId===company&&['staff','head_staff','co_admin'].includes(m.role))).map(a=>a.username))].sort((a,b)=>a.localeCompare(b));
+  fillSelect('activityStaff',[['','All staff'],...names.map(name=>[name,name])],false);
+  staffSelect.dataset.scope=scope;staffSelect.disabled=false;
+ }
  const rows=check(await db.rpc('staff_activity_report',{p_company:company,p_from:range.from||'2026-01-01',p_to:range.to||dubaiToday(),p_staff:$('activityStaff').value.trim(),p_action:$('activityAction').value,p_offset:staffActivityPage*50}));
  if(request!==staffActivityRequest||ticket!==generation||company!==activeAccount||!ready||!canWrite())return;
  for(const item of rows.slice(0,50)){const tr=document.createElement('tr');for(const value of [new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Dubai',dateStyle:'medium',timeStyle:'short'}).format(new Date(item.activity_at)),item.staff_name,item.action,item.keyword,item.market,item.ranking_date,item.position_label])tr.insertCell().textContent=value??'—';$('activityRows').append(tr);}
  $('activityStatus').textContent=rows.length?'Showing recorded activity for '+companyLabel()+'.':'No matching recorded activity.';
  $('activityPage').textContent='Page '+(staffActivityPage+1);$('activityPrevious').disabled=staffActivityPage===0;$('activityNext').disabled=rows.length<=50;
- }catch(error){if(request===staffActivityRequest&&ticket===generation)$('activityStatus').textContent='Could not load activity: '+error.message;}
+ }catch(error){if(request===staffActivityRequest&&ticket===generation){$('activityStaff').disabled=false;$('activityStatus').textContent='Could not load activity: '+error.message;}}
 }
 function comparisonStatus(start,end){
  if(start===undefined||end===undefined)return 'No comparison';
