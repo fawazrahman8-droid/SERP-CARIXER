@@ -46,7 +46,8 @@ function fillSelect(id,items,all){
   if([...el.options].some(o=>o.value===old))el.value=old;
 }
 function filtered(opts={}){
-  return state.rows.filter(r=>r.date!=='2099-12-31').filter(r=>
+  const range=typeof dateRangeFor==='function'?dateRangeFor():{from:'',to:'',invalid:false};
+  return state.rows.filter(r=>r.date!=='2099-12-31'&&!range.invalid&&(!range.from||r.date>=range.from)&&(!range.to||r.date<=range.to)).filter(r=>
     (!opts.month||opts.month==='ALL'||r.date.startsWith(opts.month)) &&
     (!opts.country||opts.country==='ALL'||r.country===opts.country) &&
     (!opts.keyword||opts.keyword==='ALL'||r.keyword===opts.keyword) &&
@@ -98,7 +99,7 @@ function updateRankDonut(month,country){
   document.getElementById('donutLegend').innerHTML=labels.map((l,i)=>{const pct=total?(vals[i]/total*100).toFixed(1):0;const colors=['#16a34a','#2563eb','#d97706','#475569'];return `<div class="legend-row"><span class="legend-dot" style="background:${colors[i]}"></span><span>${l}</span><b>${vals[i]} <small style="color:var(--muted);font-weight:500">(${pct}%)</small></b></div>`}).join('');
 }
 function updateDashboard(){
-  const rs=state.rows.filter(r=>r.date!=='2099-12-31'), countries=[...new Set([...(state.markets||[]),...rs.map(r=>r.country)])];
+  const rs=filtered({month:document.getElementById('dashMonth').value,country:document.getElementById('dashCountry').value}), countries=[...new Set([...(state.markets||[]),...rs.map(r=>r.country)])];
   document.getElementById('mKeywords').textContent=(state.keywords||[]).length;
   document.getElementById('mCountries').textContent=countries.length;
   document.getElementById('mEntries').textContent=rs.length.toLocaleString();
