@@ -62,6 +62,8 @@ function applyRoleUI(){
  refreshEntryKeywords();
  document.querySelectorAll('.nav button').forEach(el=>el.hidden=false);
  document.querySelector('[data-page="audit"]').hidden=!canAudit();
+ document.querySelector('[data-page="activity"]').hidden=!canWrite();
+ if(!canWrite()&&$('activity').classList.contains('active')){document.querySelector('[data-page="dashboard"]').click();}
  document.querySelector('[data-page="staffs"]').hidden=!canManageStaff();
  const requestsButton=document.querySelector('[data-page="requests"]');requestsButton.hidden=!canSeeWorkRequests()||canManageStaff();requestsButton.textContent='Request to admin';
  const requestsContent=$('workRequestsContent');if(requestsContent)(canManageStaff()?$('staffs'):$('requests')).append(requestsContent);
@@ -97,10 +99,10 @@ function clearRenderedPages(){cancelDonutEntrance();
  for(const chart of [monthChart,historyChart,reportChart,rankDonut])chart?.destroy();
  monthChart=historyChart=reportChart=rankDonut=null;
  document.querySelectorAll('tbody,thead#rankHead,.keyword-list,#latestSnapshot,#donutLegend,#dashReportStats,#reportStats,#dataInfo').forEach(el=>el.replaceChildren());
- document.querySelectorAll('.pagination:not(.audit-pagination):not(.work-request-pagination)').forEach(el=>el.remove());
+ document.querySelectorAll('.pagination:not(.audit-pagination):not(.work-request-pagination):not(.activity-pagination)').forEach(el=>el.remove());
 }
 function renderActivePage(){
- const renderers={dashboard:updateDashboard,rankings:renderRankings,history:renderHistory,reports:renderReport,entry:renderEntry,keywords:renderKeywords,markets:renderMarkets,import:renderImportInfo,audit:renderAudit,staffs:renderStaffInfo,requests:renderWorkRequests};
+ const renderers={dashboard:updateDashboard,rankings:renderRankings,history:renderHistory,reports:renderReport,entry:renderEntry,keywords:renderKeywords,markets:renderMarkets,import:renderImportInfo,audit:renderAudit,staffs:renderStaffInfo,requests:renderWorkRequests,activity:renderStaffActivity};
  (renderers[document.querySelector('.page.active')?.id]||updateDashboard)();
 }
 function pageSlice(key,items,size,targetId,render){
@@ -276,7 +278,7 @@ function downloadDailyRankingsPDF(){
  const doc=new window.jspdf.jsPDF('l','mm','a4'),body=[];
  for(const d of dates)for(const k of pairs.values()){const key=JSON.stringify([k.name,k.market,d]);body.push([d,k.name,k.market,positions.has(key)?displayPosition(positions.get(key),d):'No entry']);}
  doc.setFontSize(18);doc.text('Daily Rankings Report',14,16);doc.setFontSize(10);
- doc.text(companyLabel(),14,24);doc.text('Period: '+(date||month)+' | Country: '+(country==='ALL'?'All countries':country),14,31);
+ doc.text(companyLabel(),14,24);doc.text('Period: '+(dateRangeFor('rankings').from||dateRangeFor('rankings').to?((dateRangeFor('rankings').from||'Beginning')+' to '+(dateRangeFor('rankings').to||'Latest')):(date||month))+' | Country: '+(country==='ALL'?'All countries':country),14,31);
  if(q)doc.text('Keyword filter: '+q,14,38);
  doc.autoTable({startY:q?44:38,head:[['Date','Keyword','Country / Market','Position']],body,styles:{fontSize:8,cellPadding:2.5},columnStyles:{1:{cellWidth:140}},headStyles:{fillColor:[15,23,42]},margin:{left:14,right:14},didDrawPage:()=>{doc.setFontSize(8);doc.text('Page '+doc.internal.getNumberOfPages(),270,202);}});
  doc.save('SERP-Daily-Rankings-'+(activeCompany().domain||'company').replace(/[^a-z0-9.-]/gi,'-')+'-'+(date||month)+'.pdf');notify('Daily rankings PDF downloaded.');
@@ -567,6 +569,7 @@ async function renderAudit(){
  $('auditStatus').textContent='Loading audit history…';$('auditPrevious').disabled=$('auditNext').disabled=true;
  let query=db.from('audit_events').select('*').order('occurred_at',{ascending:false}).order('id',{ascending:false}).range(auditPage*50,auditPage*50+50);
  if($('auditCompany').value)query=query.eq('company_id',$('auditCompany').value);
+ const auditRange=dateRangeFor('audit');if(auditRange.from)query=query.gte('occurred_at',auditRange.from+'T00:00:00+04:00');if(auditRange.to)query=query.lt('occurred_at',new Date(Date.parse(auditRange.to+'T00:00:00+04:00')+86400000).toISOString());
  if($('auditAction').value)query=query.eq('action',$('auditAction').value);
  if($('auditUser').value.trim())query=query.ilike('actor_name','%'+$('auditUser').value.trim()+'%');
  try{
@@ -600,6 +603,7 @@ function wireUI(){
  try{$('rememberLogin').checked=sessionStorage.getItem('serp-remember-choice')==='true';}catch{}
  $('rememberLogin').onchange=()=>{try{sessionStorage.setItem('serp-remember-choice',String($('rememberLogin').checked));}catch{}};
  setupAuditUI();
+ setupReportingFeatures();
  setupStaffUI();
  setInterval(()=>{if(user&&ready&&canManageStaff())void renderRankingAlerts();},45000);
  setupWorkRequestsUI();
@@ -609,7 +613,7 @@ function wireUI(){
  document.addEventListener('change',e=>{if(e.target.closest('.filters'))pageOffsets.clear();},true);
  document.addEventListener('input',e=>{if(e.target.id==='rankSearch')pageOffsets.clear();},true);
  const actions={logout,goToReports,generateCurrentPDF,saveManualEntry,addKeyword,addMarket};document.querySelectorAll('[data-action]').forEach(el=>el.onclick=actions[el.dataset.action]);$('accountSelect').onchange=e=>switchAccount(e.target.value);
- const titles={dashboard:'SERP Dashboard',rankings:'Daily Rankings',history:'Keyword History',reports:'Monthly Reports',entry:'Manual SERP Entry',keywords:'Keyword Management',markets:'Countries / Markets',import:'Import / Data',audit:'Audit History',staffs:'Staff info',requests:'Request to admin'};
+ const titles={dashboard:'SERP Dashboard',rankings:'Daily Rankings',history:'Keyword History',reports:'Monthly Reports',entry:'Manual SERP Entry',keywords:'Keyword Management',markets:'Countries / Markets',import:'Import / Data',audit:'Audit History',staffs:'Staff info',requests:'Request to admin',activity:'Staff activity'};
  document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>{if(!ready)return;document.querySelectorAll('.nav button,.page').forEach(x=>x.classList.remove('active'));b.classList.add('active');$(b.dataset.page).classList.add('active');$('pageTitle').textContent=titles[b.dataset.page];$('pageDesc').textContent=pageDescription();renderActivePage();});
  for(const id of ['rankMonth','rankCountry'])$(id).onchange=()=>{if(id==='rankMonth'&&$('rankDate').value&&!$('rankDate').value.startsWith($('rankMonth').value))$('rankDate').value='';renderRankings();};
  $('rankDate').onchange=()=>{const date=$('rankDate').value;if(date){const month=date.slice(0,7),select=$('rankMonth');if(![...select.options].some(o=>o.value===month)){const option=document.createElement('option');option.value=option.textContent=month;select.append(option);}select.value=month;}renderRankings();};$('rankSearch').oninput=renderRankings;
@@ -631,4 +635,108 @@ async function boot(){wireUI();$('loader').classList.add('hide');try{if(!window.
  setInterval(async()=>{if(!ready||!user||busy||loginCheckPending)return;loginCheckPending=true;try{const status=check(await db.rpc('login_status'));if(!status.approved){clearPrivate();companies=[];memberships=[];await openSession(check(await db.auth.getSession()).session);}}catch{clearPrivate();authMessage('Your session could not be checked. Sign in again.');$('authScreen').hidden=false;}finally{loginCheckPending=false;}},30000);
  document.modelContext?.registerTool({name:'read_serp_workspace_summary',description:'Read counts for the signed-in, currently selected SERP company.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true,untrustedContentHint:true},execute(input){if(Object.keys(input||{}).length||!ready||!user)throw Error('A loaded authenticated workspace and empty input are required.');return {company:companyLabel(),markets:state.markets.length,keywords:state.keywords.length,rankings:state.rows.length};}});
  }catch(e){authMessage(e.message);}}
+
+let staffActivityPage=0,staffActivityRequest=0;
+function dateRangeFor(page=document.querySelector('.page.active')?.id){
+ const from=$(page+'From')?.value||'',to=$(page+'To')?.value||'';
+ return {from,to,invalid:!!(from&&to&&from>to)};
+}
+function setupReportingFeatures(){
+ const nav=document.createElement('button');nav.dataset.page='activity';nav.textContent='Staff activity';nav.hidden=true;document.querySelector('.nav').append(nav);
+ const page=document.createElement('section');page.id='activity';page.className='page';
+ page.innerHTML='<div class="panel"><h3>Staff activity</h3><p class="hint">Recorded searches and saved changes. Search clicks do not prove a ranking was completed. Times: Dubai (UTC+4).</p><div class="filters"><div><label for="activityStaff">Staff username</label><input id="activityStaff" placeholder="Vismaya, Farhan, or any username"></div><div><label for="activityAction">Activity</label><select id="activityAction"><option value="">All activity</option><option>Searched</option><option>Saved</option><option>Updated</option><option>Deleted</option></select></div></div><button id="activityRefresh" class="btn">Refresh activity</button><p id="activityStatus" role="status"></p><div class="tablewrap"><table><thead><tr><th>Time (Dubai)</th><th>Staff</th><th>Activity</th><th>Keyword</th><th>Country</th><th>Ranking date</th><th>Position</th></tr></thead><tbody id="activityRows"></tbody></table></div><div class="pagination activity-pagination"><button class="btn" id="activityPrevious">Previous</button><span id="activityPage"></span><button class="btn" id="activityNext">Next</button></div></div>';
+ document.querySelector('main').append(page);
+ for(const key of ['dashboard','rankings','reports','activity','audit']){
+  const controls=document.createElement('div');controls.className='filters';controls.style.cssText='align-items:end;padding:14px 0;';
+  controls.innerHTML='<div><label for="'+key+'From">Start date</label><input type="date" id="'+key+'From"></div><div><label for="'+key+'To">End date</label><input type="date" id="'+key+'To"></div><button type="button" class="btn" id="'+key+'PreviousMonth">Previous month</button><button type="button" class="btn" id="'+key+'ClearRange">Clear dates</button><span id="'+key+'RangeError" role="status" class="hint"></span>';
+  controls.querySelectorAll('label').forEach(label=>{label.style.cssText='display:block;margin-bottom:6px;font-size:12px;color:var(--muted)';});
+  $(key).prepend(controls);
+  const changed=()=>{const range=dateRangeFor(key);$(key+'RangeError').textContent=range.invalid?'Start date must be on or before end date.':'';pageOffsets.clear();staffActivityPage=0;auditPage=0;
+   const month={dashboard:'dashMonth',rankings:'rankMonth',reports:'reportMonth'}[key];if(month&&(range.from||range.to))$(month).value='ALL';
+   if(key==='rankings')$('rankDate').value='';
+   if(!range.invalid)renderActivePage();
+  };
+  $(key+'From').onchange=$(key+'To').onchange=changed;
+  $(key+'PreviousMonth').onclick=()=>{const today=dubaiToday(),d=new Date(today+'T12:00:00Z');d.setUTCDate(1);d.setUTCMonth(d.getUTCMonth()-1);$(key+'From').value=d.toISOString().slice(0,10);d.setUTCMonth(d.getUTCMonth()+1);d.setUTCDate(0);$(key+'To').value=d.toISOString().slice(0,10);changed();};
+  $(key+'ClearRange').onclick=()=>{$(key+'From').value=$(key+'To').value='';changed();};
+ }
+ $('activityFrom').value=dubaiToday();$('activityTo').value=dubaiToday();
+ const reportControls=document.createElement('div');reportControls.className='filters';
+ reportControls.innerHTML='<div><label for="reportComparison">Compare</label><select id="reportComparison"><option value="endpoints">First vs last date</option><option value="previous">Previous month</option></select></div><div><label for="reportMovement">Keywords to include</label><select id="reportMovement"><option value="all">All keywords</option><option value="Improved">Improved only</option><option value="Declined">Declined only</option></select></div><p class="hint">Missing entries are never treated as Not Ranked. Previous month compares the last recorded position in each period.</p>';
+ $('reports').prepend(reportControls);
+ for(const id of ['reportComparison','reportMovement'])$(id).onchange=()=>{pageOffsets.delete('report');renderReport();};
+ for(const id of ['activityStaff','activityAction'])$(id).onchange=()=>{staffActivityPage=0;void renderStaffActivity();};
+ $('activityRefresh').onclick=()=>{staffActivityPage=0;void renderStaffActivity();};
+ $('activityPrevious').onclick=()=>{staffActivityPage=Math.max(0,staffActivityPage-1);void renderStaffActivity();};
+ $('activityNext').onclick=()=>{staffActivityPage++;void renderStaffActivity();};
+ document.addEventListener('change',event=>{
+  const key={dashMonth:'dashboard',rankMonth:'rankings',reportMonth:'reports',rankDate:'rankings'}[event.target.id];
+  if(key){$(key+'From').value=$(key+'To').value='';$(key+'RangeError').textContent='';renderActivePage();}
+ });
+}
+async function renderStaffActivity(){
+ const request=++staffActivityRequest,ticket=generation,company=activeAccount;
+ $('activityRows').replaceChildren();if(!ready||!user||!canWrite())return;
+ const range=dateRangeFor('activity');if(range.invalid)return;
+ $('activityStatus').textContent='Loading staff activity…';
+ $('activityPrevious').disabled=$('activityNext').disabled=true;
+ try{
+ const rows=check(await db.rpc('staff_activity_report',{p_company:company,p_from:range.from||'2026-01-01',p_to:range.to||dubaiToday(),p_staff:$('activityStaff').value.trim(),p_action:$('activityAction').value,p_offset:staffActivityPage*50}));
+ if(request!==staffActivityRequest||ticket!==generation||company!==activeAccount||!ready||!canWrite())return;
+ for(const item of rows.slice(0,50)){const tr=document.createElement('tr');for(const value of [new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Dubai',dateStyle:'medium',timeStyle:'short'}).format(new Date(item.activity_at)),item.staff_name,item.action,item.keyword,item.market,item.ranking_date,item.position_label])tr.insertCell().textContent=value??'—';$('activityRows').append(tr);}
+ $('activityStatus').textContent=rows.length?'Showing recorded activity for '+companyLabel()+'.':'No matching recorded activity.';
+ $('activityPage').textContent='Page '+(staffActivityPage+1);$('activityPrevious').disabled=staffActivityPage===0;$('activityNext').disabled=rows.length<=50;
+ }catch(error){if(request===staffActivityRequest&&ticket===generation)$('activityStatus').textContent='Could not load activity: '+error.message;}
+}
+function comparisonStatus(start,end){
+ if(start===undefined||end===undefined)return 'No comparison';
+ if(start===end)return 'Stable';
+ if(start===null)return 'Improved';
+ if(end===null)return 'Declined';
+ return end<start?'Improved':'Declined';
+}
+function reportDataset(){
+ const range=dateRangeFor('reports'),month=$('reportMonth').value,country=$('reportCountry').value,mode=$('reportComparison').value;
+ const all=state.rows.filter(r=>r.date!=='2099-12-31'&&(country==='ALL'||r.country===country));
+ const selected=all.filter(r=>(!range.from||r.date>=range.from)&&(!range.to||r.date<=range.to)&&((range.from||range.to)||!month||month==='ALL'||r.date.startsWith(month)));
+ const dates=[...new Set(selected.map(r=>r.date))].sort();
+ const monthStart=month&&month!=='ALL'?month+'-01':undefined;
+ const monthEnd=monthStart?new Date(Date.UTC(Number(month.slice(0,4)),Number(month.slice(5,7)),0)).toISOString().slice(0,10):undefined;
+ const from=range.from||(mode==='previous'?monthStart:undefined)||dates[0],to=range.to||(mode==='previous'?monthEnd:undefined)||dates.at(-1);
+ if(range.invalid)return {rows:[],observations:[],label:'Invalid date range'};
+ let previousFrom,previousTo;
+ if(mode==='previous'&&from){const first=new Date(from.slice(0,7)+'-01T12:00:00Z');first.setUTCDate(0);previousTo=first.toISOString().slice(0,10);first.setUTCDate(1);previousFrom=first.toISOString().slice(0,10);}
+ const groups=new Map();
+ for(const k of state.keywords){if(country==='ALL'||k.market===country)groups.set(JSON.stringify([k.name,k.market]),{keyword:k.name,market:k.market,rows:[]});}
+ for(const r of all){const key=JSON.stringify([r.keyword,r.country]);if(!groups.has(key))groups.set(key,{keyword:r.keyword,market:r.country,rows:[]});groups.get(key).rows.push(r);}
+ let rows=[...groups.values()].map(g=>{g.rows.sort((a,b)=>a.date.localeCompare(b.date));
+ const start=mode==='previous'?g.rows.filter(r=>r.date>=previousFrom&&r.date<=previousTo).at(-1):g.rows.find(r=>r.date===from);
+ const end=mode==='previous'?g.rows.filter(r=>(!from||r.date>=from)&&(!to||r.date<=to)).at(-1):g.rows.find(r=>r.date===to);
+ return {...g,start:start?.position,end:end?.position,startDate:start?.date,endDate:end?.date,status:comparisonStatus(start?.position,end?.position)};});
+ const movement=$('reportMovement').value;if(movement!=='all')rows=rows.filter(r=>r.status===movement);
+ rows.sort((a,b)=>a.keyword.localeCompare(b.keyword)||a.market.localeCompare(b.market));
+ const keys=new Set(rows.map(r=>JSON.stringify([r.keyword,r.market])));
+ return {rows,observations:selected.filter(r=>keys.has(JSON.stringify([r.keyword,r.country]))),label:mode==='previous'?(previousFrom||'—')+' to '+(previousTo||'—')+' vs '+(from||'—')+' to '+(to||'—'):(from||'—')+' to '+(to||'—')};
+}
+function reportPosition(value){return value===undefined?'No entry':value===null?'Not Ranked':String(value);}
+function reportChange(row){return typeof row.start==='number'&&typeof row.end==='number'?String(row.start-row.end):'—';}
+function renderReport(){
+ const data=reportDataset(),rows=data.rows;
+ $('reportDateLabel').textContent=data.label;$('reportCountryLabel').textContent=$('reportCountry').value==='ALL'?'All countries':$('reportCountry').value;
+ const improved=rows.filter(r=>r.status==='Improved').length,declined=rows.filter(r=>r.status==='Declined').length;
+ $('reportStats').innerHTML='<div class="item">Keywords in report<b>'+rows.length+'</b></div><div class="item">Improved / declined<b>'+improved+' / '+declined+'</b></div><div class="item">No comparison<b>'+rows.filter(r=>r.status==='No comparison').length+'</b></div>';
+ const page=pageSlice('report',rows,100,'reportBody',renderReport);
+ $('reportBody').innerHTML=page.items.map((r,i)=>'<tr><td>'+(page.offset+i+1)+'</td><td>'+esc(r.keyword+' · '+r.market)+'</td><td>'+reportPosition(r.start)+'<br><small>'+esc(r.startDate||'No entry')+'</small></td><td>'+reportPosition(r.end)+'<br><small>'+esc(r.endDate||'No entry')+'</small></td><td>'+reportChange(r)+'</td><td>'+r.status+'</td></tr>').join('')||'<tr><td colspan="6" class="empty">No keywords match these filters.</td></tr>';
+ const days=[...new Set(data.observations.map(r=>r.date))].sort();reportChart?.destroy();
+ reportChart=new SafeChart($('reportChart'),{type:'line',data:{labels:days,datasets:[{label:'Average position',data:dailyAverages(data.observations,days),borderWidth:2,tension:.25}]},options:{scales:{y:{reverse:true}}}});
+}
+function generateCurrentPDF(){
+ const data=reportDataset();if(dateRangeFor('reports').invalid)return notify('Choose a valid date range.');
+ const doc=new window.jspdf.jsPDF('l','mm','a4');
+ doc.setFontSize(18);doc.text('SERP TRACK — '+companyLabel(),14,17);doc.setFontSize(10);
+ doc.text('Period: '+data.label,14,26);doc.text('Keywords: '+$('reportMovement').selectedOptions[0].text+' | Market: '+$('reportCountry').value,14,33);
+ doc.autoTable({startY:40,head:[['Keyword','Country','Start date','Start position','End date','End position','Change','Status']],body:data.rows.map(r=>[r.keyword,r.market,r.startDate||'No entry',reportPosition(r.start),r.endDate||'No entry',reportPosition(r.end),reportChange(r),r.status]),styles:{fontSize:8},headStyles:{fillColor:[15,23,42]}});
+ doc.save(activeCompany().slug+'-performance-'+$('reportMovement').value+'.pdf');toast('PDF generated');
+}
+
 boot();
